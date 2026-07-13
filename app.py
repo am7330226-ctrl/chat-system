@@ -109,6 +109,12 @@ class Message(db.Model):
         self.file_type       = file_type
 
     def to_dict(self):
+        reactions = db.session.scalars(db.select(Reaction).filter_by(message_id=self.id)).all()
+        rx_dict = {}
+        for r in reactions:
+            if r.emoji not in rx_dict:
+                rx_dict[r.emoji] = []
+            rx_dict[r.emoji].append(r.username)
         return {
             'id':        self.id,
             'username':  self.sender_username,
@@ -117,7 +123,22 @@ class Message(db.Model):
             'read':      self.read,
             'file_url':  self.file_url,
             'file_type': self.file_type,
+            'reactions': rx_dict,
         }
+
+
+class Reaction(db.Model):
+    id         = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.Integer, db.ForeignKey('message.id', ondelete='CASCADE'), nullable=False)
+    username   = db.Column(db.String(80), nullable=False)
+    emoji      = db.Column(db.String(10), nullable=False)
+
+    __table_args__ = (db.UniqueConstraint('message_id', 'username', name='_message_user_reaction_uc'),)
+
+    def __init__(self, message_id, username, emoji):
+        self.message_id = message_id
+        self.username   = username
+        self.emoji      = emoji
 
 
 # Create tables
@@ -454,12 +475,14 @@ def handle_send_private_message(data):
     room = f'conv_{conv_id}'
     emit('receive_private_message', {
         'conversation_id': conv_id,
+        'message_id':      msg.id,
         'username':        me,
         'text':            content,
         'timestamp':       msg.timestamp.strftime('%H:%M'),
         'file_url':        file_url,
         'file_type':       file_type,
-    }, to=room)
+        'reactions':       {}
+     }, to=room)
 
     # Notify both users of a new message (for inbox badges and sound alerts)
     notification_payload = {
@@ -472,6 +495,52 @@ def handle_send_private_message(data):
     }
     emit('new_message_notification', notification_payload, to=f"user_{conv.user_a}")
     emit('new_message_notification', notification_payload, to=f"user_{conv.user_b}")
+
+@socketio.on('add_reaction')
+def handle_add_reaction(data):
+    token      = data.get('token', '')
+    message_id = data.get('message_id')
+    emoji      = data.get('emoji', '').strip()
+
+    me = verify_token(token)
+    if not me or not message_id or not emoji:
+        return
+
+    msg = db.session.get(Message, message_id)
+    if not msg:
+        return
+
+    conv = db.session.get(Conversation, msg.conversation_id)
+    if not conv or not conv.involves(me):
+        return
+
+    existing = db.session.scalar(
+        db.select(Reaction).filter_by(message_id=message_id, username=me)
+    )
+
+    if existing:
+        if existing.emoji == emoji:
+            db.session.delete(existing)
+        else:
+            existing.emoji = emoji
+    else:
+        new_rx = Reaction(message_id=message_id, username=me, emoji=emoji)
+        db.session.add(new_rx)
+    
+    db.session.commit()
+
+    all_rx = db.session.scalars(db.select(Reaction).filter_by(message_id=message_id)).all()
+    rx_dict = {}
+    for r in all_rx:
+        if r.emoji not in rx_dict:
+            rx_dict[r.emoji] = []
+        rx_dict[r.emoji].append(r.username)
+
+    room = f'conv_{msg.conversation_id}'
+    emit('message_reaction_updated', {
+        'message_id': message_id,
+        'reactions':  rx_dict
+    }, to=room)
 
 # ─── Run ─────────────────────────────────────────────────────────────────────
 

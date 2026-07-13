@@ -348,7 +348,7 @@
 
         socket.on('receive_private_message', (data) => {
             if (data.conversation_id === currentConvId) {
-                appendMessage(data.username, data.text, data.timestamp, true, data.read, data.file_url, data.file_type);
+                appendMessage(data.username, data.text, data.timestamp, true, data.read, data.file_url, data.file_type, data.message_id, data.reactions);
                 scrollToBottom();
 
                 // If message is from the other user, mark as read immediately and play chime
@@ -356,6 +356,13 @@
                     AudioFX.playReceive();
                     socket.emit('mark_read', { token: token, conversation_id: currentConvId });
                 }
+            }
+        });
+
+        socket.on('message_reaction_updated', (data) => {
+            const container = document.getElementById(`rx-container-${data.message_id}`);
+            if (container) {
+                renderReactionCapsules(container, data.reactions, data.message_id);
             }
         });
 
@@ -434,10 +441,11 @@
             `;
         }
 
-        function appendMessage(msgUsername, text, timeStr, animate = true, isRead = false, fileUrl = null, fileType = null) {
+        function appendMessage(msgUsername, text, timeStr, animate = true, isRead = false, fileUrl = null, fileType = null, messageId = null, reactions = {}) {
             const isMe = (msgUsername === username);
             const row  = document.createElement('div');
             row.className = 'msg-row ' + (isMe ? 'me' : 'other');
+            if (messageId) row.dataset.messageId = messageId;
             if (animate) row.classList.add('new-bubble');
 
             if (!isMe) {
@@ -447,13 +455,18 @@
                 row.appendChild(meta);
             }
 
+            const bubbleWrapper = document.createElement('div');
+            bubbleWrapper.className = 'msg-bubble-wrapper';
+
+            let bubbleElement;
+
             if (fileUrl && fileType === 'image') {
                 const img = document.createElement('img');
                 img.src       = `${API}${fileUrl}`;
                 img.className = 'msg-image';
                 img.alt       = 'image';
                 img.onclick   = () => window.open(`${API}${fileUrl}`, '_blank');
-                row.appendChild(img);
+                bubbleElement = img;
             } else if (fileUrl && fileType === 'file') {
                 const link = document.createElement('a');
                 link.href      = `${API}${fileUrl}`;
@@ -466,14 +479,39 @@
                         <div class="msg-file-name">${text !== '[file]' ? text : filename}</div>
                         <div class="msg-file-label">Tap to download</div>
                     </div>`;
-                row.appendChild(link);
+                bubbleElement = link;
             } else {
                 const bubble = document.createElement('div');
                 bubble.className   = 'msg-bubble';
                 bubble.textContent = text;
                 bubble.dataset.originalText = text;
-                row.appendChild(bubble);
+                bubbleElement = bubble;
             }
+
+            bubbleWrapper.appendChild(bubbleElement);
+
+            if (messageId) {
+                const reactTrigger = document.createElement('button');
+                reactTrigger.className = 'msg-react-trigger';
+                reactTrigger.innerHTML = '😀';
+                reactTrigger.title = 'React to message';
+                reactTrigger.type = 'button';
+                
+                reactTrigger.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    showReactionPicker(reactTrigger, messageId);
+                });
+
+                bubbleWrapper.appendChild(reactTrigger);
+
+                const rxContainer = document.createElement('div');
+                rxContainer.className = 'msg-reactions-list';
+                rxContainer.id = `rx-container-${messageId}`;
+                renderReactionCapsules(rxContainer, reactions, messageId);
+                bubbleWrapper.appendChild(rxContainer);
+            }
+
+            row.appendChild(bubbleWrapper);
 
             if (timeStr) {
                 const time = document.createElement('div');
@@ -483,6 +521,66 @@
             }
 
             chatBox.appendChild(row);
+        }
+
+        function renderReactionCapsules(container, reactions, messageId) {
+            container.innerHTML = '';
+            if (!reactions) return;
+
+            Object.keys(reactions).forEach(emoji => {
+                const users = reactions[emoji];
+                if (!users || users.length === 0) return;
+
+                const badge = document.createElement('span');
+                badge.className = 'rx-badge';
+                if (users.includes(username)) {
+                    badge.classList.add('my-reaction');
+                }
+                badge.innerHTML = `<span class="rx-emoji">${emoji}</span> <span class="rx-count">${users.length}</span>`;
+                badge.title = users.join(', ');
+
+                badge.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    socket.emit('add_reaction', { token: token, message_id: messageId, emoji: emoji });
+                });
+
+                container.appendChild(badge);
+            });
+        }
+
+        function showReactionPicker(trigger, messageId) {
+            const existing = document.getElementById('active-emoji-picker');
+            if (existing) existing.remove();
+
+            const picker = document.createElement('div');
+            picker.id = 'active-emoji-picker';
+            picker.className = 'emoji-picker-dropdown';
+            
+            const emojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+            emojis.forEach(emoji => {
+                const btn = document.createElement('button');
+                btn.className = 'emoji-picker-btn';
+                btn.textContent = emoji;
+                btn.addEventListener('click', () => {
+                    socket.emit('add_reaction', { token: token, message_id: messageId, emoji: emoji });
+                    picker.remove();
+                });
+                picker.appendChild(btn);
+            });
+
+            document.body.appendChild(picker);
+
+            const rect = trigger.getBoundingClientRect();
+            picker.style.top = `${rect.top + window.scrollY - 45}px`;
+            picker.style.left = `${rect.left + window.scrollX - 70}px`;
+
+            const dismiss = (e) => {
+                if (!picker.contains(e.target) && e.target !== trigger) {
+                    picker.remove();
+                    document.removeEventListener('click', dismiss);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', dismiss), 50);
         }
 
         function appendSystem(text) {
@@ -508,7 +606,7 @@
                     divider.className   = 'history-divider';
                     divider.innerHTML   = `<span class="history-divider-label">${msgs.length} previous messages</span>`;
                     chatBox.appendChild(divider);
-                    msgs.forEach(m => appendMessage(m.username, m.text, m.timestamp, false, m.read, m.file_url, m.file_type));
+                    msgs.forEach(m => appendMessage(m.username, m.text, m.timestamp, false, m.read, m.file_url, m.file_type, m.id, m.reactions));
                     scrollToBottom();
                 } else {
                     chatBox.innerHTML = `
