@@ -1033,3 +1033,154 @@ body {
         width: 100%;
     }
 }
+
+/* ==========================================================================
+   DARK THEME AESTHETIC OVERRIDES
+   ========================================================================== */
+body.dark-theme {
+    --bg-main: #0b0f19; /* Darker Slate */
+    --glass-bg: rgba(15, 23, 42, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    
+    --primary: #6366f1;
+    --primary-light: #1e1b4b;
+    --primary-gradient: linear-gradient(135deg, #6366f1, #818cf8);
+    
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --text-muted: #64748b;
+}
+
+body.dark-theme .sidebar-rail {
+    background: rgba(15, 23, 42, 0.4);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+body.dark-theme .chat-explorer {
+    background: rgba(15, 23, 42, 0.2);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+body.dark-theme .chat-card.active {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.03);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+body.dark-theme .chat-card:hover:not(.active)::after {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+body.dark-theme .avatar {
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+body.dark-theme .filter-chip {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+}
+
+body.dark-theme .filter-chip.active {
+    background: var(--text-primary);
+    color: var(--bg-main);
+}
+
+body.dark-theme .filter-chip:hover:not(.active) {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .search-input {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
+}
+
+body.dark-theme .search-input:focus {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(99, 102, 241, 0.4);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+body.dark-theme .user-widget {
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+body.dark-theme .chat-header {
+    background: rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+body.dark-theme #searchBarContainer {
+    background: rgba(15, 23, 42, 0.9) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+body.dark-theme #chatSearchInput {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-primary) !important;
+}
+
+body.dark-theme .composer-box {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme .composer-textarea {
+    color: var(--text-primary);
+}
+
+body.dark-theme .composer-btn {
+    color: var(--text-secondary);
+}
+
+body.dark-theme .msg-bubble {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+body.dark-theme .msg-row.other .msg-bubble {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    color: var(--text-primary);
+}
+
+body.dark-theme .modal {
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+body.dark-theme .user-search {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+body.dark-theme .user-search:focus {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(99, 102, 241, 0.4);
+}
+
+body.dark-theme .user-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+body.dark-theme #profileStatusText {
+    background: rgba(0, 0, 0, 0.15) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-secondary) !important;
+}
+
+body.dark-theme .history-divider-label {
+    background: rgba(15, 23, 42, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.04) !important;
+    color: var(--text-secondary) !important;
+}
+
+body.dark-theme .history-divider::before {
+    background: rgba(255, 255, 255, 0.06) !important;
+}

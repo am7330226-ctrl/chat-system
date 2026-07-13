@@ -25,6 +25,7 @@
             </div>
             
             <div class="rail-footer">
+                <button class="settings-btn" id="themeToggleBtn" title="Toggle Theme" aria-label="Toggle Theme" style="margin-bottom: 12px; font-size: 18px;">🌙</button>
                 <button class="settings-btn" id="openProfileBtn" title="Profile" aria-label="Profile">👤</button>
             </div>
         </aside>
@@ -933,6 +934,29 @@
                 loadConversations();
             }
         }
+
+        // ── Theme Toggle Logic ───────────────────────────────────────────
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        
+        function initTheme() {
+            const currentTheme = localStorage.getItem('chat_theme') || 'light';
+            if (currentTheme === 'dark') {
+                document.body.classList.add('dark-theme');
+                themeToggleBtn.textContent = '☀️';
+            } else {
+                document.body.classList.remove('dark-theme');
+                themeToggleBtn.textContent = '🌙';
+            }
+        }
+
+        themeToggleBtn.addEventListener('click', () => {
+            document.body.classList.toggle('dark-theme');
+            const isDark = document.body.classList.contains('dark-theme');
+            localStorage.setItem('chat_theme', isDark ? 'dark' : 'light');
+            themeToggleBtn.textContent = isDark ? '☀️' : '🌙';
+        });
+
+        initTheme();
 
         // ── Init ─────────────────────────────────────────────────────────
         checkQueryParams();
