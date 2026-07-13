@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ChatSphere — Log In</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            background-color: var(--bg-main) !important;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .auth-container {
+            width: 100%;
+            max-width: 380px;
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+            background: rgba(255, 255, 255, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--glass-shadow), 0 20px 40px rgba(0, 0, 0, 0.02);
+            padding: 36px;
+        }
+
+        .auth-header {
+            text-align: center;
+        }
+
+        .auth-header h1 {
+            font-size: 28px;
+            font-weight: 800;
+            font-family: var(--font-heading);
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .auth-header p {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            padding-left: 4px;
+        }
+
+        .form-group input {
+            background-color: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            border-radius: var(--radius-md);
+            padding: 12px 16px;
+            font-size: 14px;
+            color: var(--text-primary);
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus {
+            background-color: white;
+            border-color: rgba(79, 70, 229, 0.3);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.08);
+        }
+
+        button[type="submit"] {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            border-radius: var(--radius-lg);
+            padding: 14px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
+        }
+
+        button[type="submit"]:hover {
+            background: var(--primary);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 14px rgba(79, 70, 229, 0.3);
+        }
+
+        button[type="submit"]:active {
+            transform: scale(0.97);
+        }
+
+        .auth-footer {
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 8px;
+        }
+
+        .auth-footer a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .auth-footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Custom alert */
+        .alert {
+            display: none;
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 500;
+            line-height: 1.4;
+            text-align: center;
+            animation: slideIn 0.2s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .alert.error {
+            display: block;
+            background-color: #ffeef0;
+            color: var(--red-badge);
+            border: 1px solid rgba(255, 59, 48, 0.05);
+        }
+
+        .alert.success {
+            display: block;
+            background-color: #eafaf1;
+            color: var(--accent-success);
+            border: 1px solid rgba(16, 185, 129, 0.05);
+        }
+
+        .alert.warning {
+            display: block;
+            background-color: #fffbeb;
+            color: var(--accent-warning);
+            border: 1px solid rgba(245, 158, 11, 0.05);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1>💬 ChatSphere</h1>
+            <p>Welcome back! Please log in.</p>
+        </div>
+
+        <div id="alert-message" class="alert"></div>
+
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="loginUsername">Username</label>
+                <input type="text" id="loginUsername" required placeholder="Enter username" autocomplete="username">
+            </div>
+            
+            <div class="form-group">
+                <label for="loginPassword">Password</label>
+                <input type="password" id="loginPassword" required placeholder="Enter password" autocomplete="current-password">
+            </div>
+
+            <button type="submit">Log In</button>
+        </form>
+
+        <div class="auth-footer">
+            Don't have an account? <a href="register.html">Register here</a>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://127.0.0.1:5000';
+        const alertMessage = document.getElementById('alert-message');
+
+        function showAlert(message, type) {
+            alertMessage.textContent = message;
+            alertMessage.className = `alert ${type}`;
+            setTimeout(() => { alertMessage.className = 'alert'; }, 5000);
+        }
+
+        // Auto-redirect if already logged in
+        const existingUser = localStorage.getItem('chat_username');
+        const existingToken = localStorage.getItem('chat_token');
+        if (existingUser && existingToken) {
+            window.location.href = 'inbox.html';
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showAlert('Login successful! Redirecting...', 'success');
+                    localStorage.setItem('chat_username', data.username);
+                    localStorage.setItem('chat_token', data.token);
+                    
+                    setTimeout(() => { window.location.href = 'inbox.html'; }, 1000);
+                } else {
+                    showAlert(`Login Failed: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showAlert('Network error. Is the Flask server running?', 'warning');
+            }
+        });
+    </script>
+</body>
+</html>

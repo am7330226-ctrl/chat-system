@@ -1,0 +1,473 @@
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_jwt_extended import (
+    JWTManager, create_access_token, decode_token
+)
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from datetime import datetime, timezone
+import os, uuid
+
+app = Flask(__name__, static_folder='.', static_url_path='')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-fallback-change-in-prod')
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-key-fallback-change-in-prod')
+CORS(app, origins="*")
+
+# File upload configuration
+UPLOAD_FOLDER = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'uploads')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'txt', 'doc', 'docx', 'zip'}
+MAX_FILE_SIZE_MB = 10
+app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE_MB * 1024 * 1024
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+@app.route('/')
+def index():
+    return app.send_static_file('login.html')
+
+# Database
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'chat.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db       = SQLAlchemy(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
+jwt      = JWTManager(app)
+
+# ─── Models ──────────────────────────────────────────────────────────────────
+
+class User(db.Model):
+    id            = db.Column(db.Integer, primary_key=True)
+    username      = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+
+    def __init__(self, username, password_hash):
+        self.username      = username
+        self.password_hash = password_hash
+
+
+class Conversation(db.Model):
+    """A private 1-on-1 conversation between two users.
+    Users are stored alphabetically so the pair is always unique."""
+    id         = db.Column(db.Integer, primary_key=True)
+    user_a     = db.Column(db.String(80), nullable=False)   # alphabetically first
+    user_b     = db.Column(db.String(80), nullable=False)   # alphabetically second
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    messages   = db.relationship('Message', backref='conversation', lazy=True,
+                                 order_by='Message.timestamp')
+
+    def __init__(self, user_a, user_b):
+        # Always store in alphabetical order so the pair is always unique
+        pair = sorted([user_a, user_b])
+        self.user_a = pair[0]
+        self.user_b = pair[1]
+
+    def involves(self, username):
+        return username in (self.user_a, self.user_b)
+
+    def other_user(self, username):
+        return self.user_b if self.user_a == username else self.user_a
+
+    def unread_count(self, for_user):
+        return sum(1 for m in self.messages if not m.read and m.sender_username != for_user)
+
+    def to_dict(self, for_user):
+        last = self.messages[-1] if self.messages else None
+        return {
+            'id':            self.id,
+            'with':          self.other_user(for_user),
+            'last_message':  last.content if last else '',
+            'last_timestamp': last.timestamp.strftime('%H:%M') if last else '',
+            'unread_count':  self.unread_count(for_user),
+        }
+
+
+class Message(db.Model):
+    id              = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversation.id'), nullable=False)
+    sender_username = db.Column(db.String(80), nullable=False)
+    content         = db.Column(db.Text, nullable=False)
+    timestamp       = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    read            = db.Column(db.Boolean, default=False, nullable=False)
+    file_url        = db.Column(db.String(300), nullable=True)   # path to uploaded file
+    file_type       = db.Column(db.String(20),  nullable=True)   # 'image' | 'file'
+
+    def __init__(self, conversation_id, sender_username, content,
+                 read=False, file_url=None, file_type=None):
+        self.conversation_id = conversation_id
+        self.sender_username = sender_username
+        self.content         = content
+        self.read            = read
+        self.file_url        = file_url
+        self.file_type       = file_type
+
+    def to_dict(self):
+        return {
+            'id':        self.id,
+            'username':  self.sender_username,
+            'text':      self.content,
+            'timestamp': self.timestamp.strftime('%H:%M'),
+            'read':      self.read,
+            'file_url':  self.file_url,
+            'file_type': self.file_type,
+        }
+
+
+# Create tables
+with app.app_context():
+    db.create_all()
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def verify_token(token):
+    """Decode and validate a JWT token. Returns the username or None."""
+    try:
+        decoded = decode_token(token)
+        return decoded.get('sub')
+    except Exception:
+        return None
+
+def get_or_create_conversation(user_a, user_b):
+    """Return existing conversation or create a new one."""
+    pair = sorted([user_a, user_b])
+    conv = db.session.scalar(
+        db.select(Conversation)
+        .filter_by(user_a=pair[0], user_b=pair[1])
+    )
+    if not conv:
+        conv = Conversation(user_a=pair[0], user_b=pair[1])
+        db.session.add(conv)
+        db.session.commit()
+    return conv
+
+# ─── HTTP Routes ─────────────────────────────────────────────────────────────
+
+@app.route('/register', methods=['POST'])
+def register():
+    data     = request.get_json()
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+
+    if not username or not password:
+        return jsonify({'message': 'Username and password are required'}), 400
+
+    if db.session.scalar(db.select(User).filter_by(username=username)):
+        return jsonify({'message': 'Username already exists'}), 409
+
+    hashed_password = generate_password_hash(password)
+    new_user        = User(username=username, password_hash=hashed_password)
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({'message': 'User registered successfully'}), 201
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    data     = request.get_json()
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+
+    if not username or not password:
+        return jsonify({'message': 'Username and password are required'}), 400
+
+    user = db.session.scalar(db.select(User).filter_by(username=username))
+
+    if user and check_password_hash(user.password_hash, password):
+        token = create_access_token(identity=username)
+        return jsonify({'message': 'Login successful', 'token': token, 'username': username}), 200
+    else:
+        return jsonify({'message': 'Invalid username or password'}), 401
+
+
+@app.route('/users', methods=['GET'])
+def get_users():
+    """Return all registered usernames (so users can discover who to chat with)."""
+    token    = request.headers.get('Authorization', '').replace('Bearer ', '')
+    me       = verify_token(token)
+    if not me:
+        return jsonify({'message': 'Unauthorized'}), 401
+
+    users = db.session.scalars(db.select(User)).all()
+    return jsonify([u.username for u in users if u.username != me]), 200
+
+
+@app.route('/conversations', methods=['GET'])
+def get_conversations():
+    """Return all conversations the logged-in user is part of."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    me    = verify_token(token)
+    if not me:
+        return jsonify({'message': 'Unauthorized'}), 401
+
+    convs = db.session.scalars(
+        db.select(Conversation)
+        .where(
+            (Conversation.user_a == me) | (Conversation.user_b == me)
+        )
+        .order_by(Conversation.created_at.desc())
+    ).all()
+
+    return jsonify([c.to_dict(me) for c in convs]), 200
+
+
+@app.route('/conversations', methods=['POST'])
+def create_or_get_conversation():
+    """Create or retrieve a conversation with another user."""
+    token      = request.headers.get('Authorization', '').replace('Bearer ', '')
+    me         = verify_token(token)
+    if not me:
+        return jsonify({'message': 'Unauthorized'}), 401
+
+    data       = request.get_json()
+    other_user = data.get('with', '').strip()
+
+    if not other_user:
+        return jsonify({'message': 'Target user required'}), 400
+    if other_user == me:
+        return jsonify({'message': 'Cannot chat with yourself'}), 400
+    if not db.session.scalar(db.select(User).filter_by(username=other_user)):
+        return jsonify({'message': 'User not found'}), 404
+
+    conv = get_or_create_conversation(me, other_user)
+    return jsonify({'conversation_id': conv.id, 'with': other_user}), 200
+
+
+@app.route('/conversations/<int:conv_id>/messages', methods=['GET'])
+def get_conversation_messages(conv_id):
+    """Return last 50 messages in a specific private conversation."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    me    = verify_token(token)
+    if not me:
+        return jsonify({'message': 'Unauthorized'}), 401
+
+    conv = db.session.get(Conversation, conv_id)
+    if not conv or not conv.involves(me):
+        return jsonify({'message': 'Forbidden'}), 403
+
+    messages = (
+        db.session.scalars(
+            db.select(Message)
+            .filter_by(conversation_id=conv_id)
+            .order_by(Message.timestamp.desc())
+            .limit(50)
+        ).all()
+    )
+    return jsonify([m.to_dict() for m in reversed(messages)]), 200
+
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    """Upload an image or file attachment for chat."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    me    = verify_token(token)
+    if not me:
+        return jsonify({'message': 'Unauthorized'}), 401
+
+    if 'file' not in request.files:
+        return jsonify({'message': 'No file provided'}), 400
+
+    file = request.files['file']
+    if not file or file.filename == '':
+        return jsonify({'message': 'Empty filename'}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({'message': 'File type not allowed'}), 400
+
+    ext      = file.filename.rsplit('.', 1)[1].lower()
+    unique   = f'{uuid.uuid4().hex}.{ext}'
+    save_path = os.path.join(UPLOAD_FOLDER, unique)
+    file.save(save_path)
+
+    file_url  = f'/uploads/{unique}'
+    file_type = 'image' if ext in {'png', 'jpg', 'jpeg', 'gif', 'webp'} else 'file'
+    return jsonify({'file_url': file_url, 'file_type': file_type, 'original_name': secure_filename(file.filename)}), 200
+
+
+@app.route('/uploads/<path:filename>')
+def serve_upload(filename):
+    """Serve an uploaded file."""
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
+
+# ─── WebSocket Events ─────────────────────────────────────────────────────────
+
+# Global mappings for online presence
+sid_to_user = {}  # {sid: username}
+user_to_sids = {} # {username: [sid, sid]}
+
+@socketio.on('connect')
+def handle_connect():
+    print(f'Client connected: {request.sid}')
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    sid = request.sid
+    username = sid_to_user.pop(sid, None)
+    if username:
+        if username in user_to_sids:
+            if sid in user_to_sids[username]:
+                user_to_sids[username].remove(sid)
+            if not user_to_sids[username]:
+                user_to_sids.pop(username, None)
+                # User has no more active tabs, broadcast offline
+                emit('status_change', {'username': username, 'status': 'offline'}, broadcast=True)
+    print(f'Client disconnected: {sid}')
+
+@socketio.on('register_presence')
+def handle_register_presence(data):
+    token = data.get('token', '')
+    username = verify_token(token)
+    if not username:
+        return
+
+    sid = request.sid
+    sid_to_user[sid] = username
+    if username not in user_to_sids:
+        user_to_sids[username] = []
+        # First time online, broadcast to everyone
+        emit('status_change', {'username': username, 'status': 'online'}, broadcast=True)
+    
+    if sid not in user_to_sids[username]:
+        user_to_sids[username].append(sid)
+
+    # Join user-specific notification room
+    join_room(f"user_{username}")
+
+    # Send the list of current online users to this client
+    online_list = list(user_to_sids.keys())
+    emit('online_user_list', {'online_users': online_list})
+
+@socketio.on('join_conversation')
+def handle_join_conversation(data):
+    """User joins a private Socket.IO room for a conversation."""
+    token   = data.get('token', '')
+    conv_id = data.get('conversation_id')
+    me      = verify_token(token)
+    if not me or not conv_id:
+        return
+
+    conv = db.session.get(Conversation, conv_id)
+    if not conv or not conv.involves(me):
+        return  # Reject: user is not part of this conversation
+
+    room = f'conv_{conv_id}'
+    join_room(room)
+    print(f'{me} joined room {room}')
+
+@socketio.on('typing')
+def handle_typing(data):
+    token   = data.get('token', '')
+    conv_id = data.get('conversation_id')
+    typing  = data.get('typing', False)
+    me      = verify_token(token)
+    if not me or not conv_id:
+        return
+
+    room = f'conv_{conv_id}'
+    emit('user_typing', {
+        'conversation_id': conv_id,
+        'username':        me,
+        'typing':          typing
+    }, to=room, include_self=False)
+
+@socketio.on('mark_read')
+def handle_mark_read(data):
+    token   = data.get('token', '')
+    conv_id = data.get('conversation_id')
+    me      = verify_token(token)
+    if not me or not conv_id:
+        return
+
+    conv = db.session.get(Conversation, conv_id)
+    if not conv or not conv.involves(me):
+        return
+
+    # Find all unread messages sent by the other participant
+    unread_messages = db.session.scalars(
+        db.select(Message)
+        .filter_by(conversation_id=conv_id, read=False)
+        .where(Message.sender_username != me)
+    ).all()
+
+    if unread_messages:
+        for m in unread_messages:
+            m.read = True
+        db.session.commit()
+
+        # Broadcast to room to notify the sender that their messages have been read
+        room = f'conv_{conv_id}'
+        emit('messages_read', {
+            'conversation_id': conv_id,
+            'reader':          me
+        }, to=room)
+
+@socketio.on('leave_conversation')
+def handle_leave_conversation(data):
+    conv_id = data.get('conversation_id')
+    if conv_id:
+        leave_room(f'conv_{conv_id}')
+
+@socketio.on('send_private_message')
+def handle_send_private_message(data):
+    token    = data.get('token', '')
+    conv_id  = data.get('conversation_id')
+    text     = data.get('text', '').strip()
+    file_url = data.get('file_url')    # optional
+    file_type = data.get('file_type')  # optional
+
+    me = verify_token(token)
+    if not me or not conv_id:
+        return
+    # Must have either text or a file
+    if not text and not file_url:
+        return
+
+    conv = db.session.get(Conversation, conv_id)
+    if not conv or not conv.involves(me):
+        return
+
+    # Use a placeholder for file-only messages
+    content = text or ('[image]' if file_type == 'image' else '[file]')
+
+    # Persist to database
+    msg = Message(
+        conversation_id=conv_id,
+        sender_username=me,
+        content=content,
+        file_url=file_url,
+        file_type=file_type
+    )
+    db.session.add(msg)
+    db.session.commit()
+
+    room = f'conv_{conv_id}'
+    emit('receive_private_message', {
+        'conversation_id': conv_id,
+        'username':        me,
+        'text':            content,
+        'timestamp':       msg.timestamp.strftime('%H:%M'),
+        'file_url':        file_url,
+        'file_type':       file_type,
+    }, to=room)
+
+    # Notify both users of a new message (for inbox badges and sound alerts)
+    notification_payload = {
+        'conversation_id': conv_id,
+        'username':        me,
+        'text':            content,
+        'file_url':        file_url,
+        'file_type':       file_type,
+        'timestamp':       msg.timestamp.strftime('%H:%M')
+    }
+    emit('new_message_notification', notification_payload, to=f"user_{conv.user_a}")
+    emit('new_message_notification', notification_payload, to=f"user_{conv.user_b}")
+
+# ─── Run ─────────────────────────────────────────────────────────────────────
+
+if __name__ == '__main__':
+    socketio.run(app, debug=True, port=5000, allow_unsafe_werkzeug=True)
