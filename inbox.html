@@ -101,6 +101,7 @@
                             <span class="active-user-status">
                                 <span id="statusDot"></span><span id="statusText">Offline</span>
                             </span>
+                            <span id="active-user-bio" style="display:block; font-size:12px; color:var(--text-secondary); margin-top:2px; font-weight:400;"></span>
                         </div>
                     </div>
                     <div class="header-action-list">
@@ -168,13 +169,18 @@
             <div class="modal-handle"></div>
             <h3>My Profile</h3>
             <div style="padding: 16px 24px 24px; display: flex; flex-direction: column; align-items: center; gap: 16px;">
-                <div id="profileAvatar" class="avatar" style="width: 80px; height: 80px; font-size: 32px; font-weight: 600; border-radius: 16px;">U</div>
+                <div id="profileAvatar" class="avatar" style="width: 80px; height: 80px; font-size: 32px; font-weight: 600; border-radius: 16px; cursor: pointer; position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05);" title="Click to upload avatar">
+                    <img id="profileAvatarImg" src="" style="width: 100%; height: 100%; object-fit: cover; display: none; position: absolute; top: 0; left: 0;">
+                    <span id="profileAvatarText">U</span>
+                </div>
+                <input type="file" id="avatarUploadInput" style="display: none;" accept="image/*">
                 <h2 id="profileUsername" style="font-size: 20px; font-weight: 700;">Username</h2>
                 <div style="width: 100%; border-top: 1px solid rgba(0,0,0,0.05); margin: 8px 0;"></div>
                 
                 <div style="width: 100%; display: flex; flex-direction: column; gap: 6px;">
-                    <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Current Status</p>
-                    <p id="profileStatusText" style="font-size: 15px; color: var(--text-secondary); background: white; padding: 12px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.03); font-weight: 500;">🟢 Active & Chatting</p>
+                    <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Bio</p>
+                    <textarea id="profileBioInput" placeholder="Write a little about yourself..." style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.05); font-family: inherit; font-size: 14px; resize: vertical; min-height: 60px; background: rgba(255,255,255,0.5);"></textarea>
+                    <button id="saveProfileBtn" style="background: var(--accent); color: white; border: none; border-radius: 20px; padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer; align-self: flex-end; margin-top: 4px; transition: opacity 0.2s;">Save Bio</button>
                 </div>
                 
                 <button id="logoutBtnModal" style="background: #ff3b30; color: white; border: none; border-radius: 20px; padding: 12px 24px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 16px; transition: opacity 0.2s;">
@@ -210,12 +216,83 @@
         const profileOverlay = document.getElementById('profileOverlay');
         const openProfileBtn = document.getElementById('openProfileBtn');
         const logoutBtnModal = document.getElementById('logoutBtnModal');
+        const profileAvatar = document.getElementById('profileAvatar');
+        const avatarUploadInput = document.getElementById('avatarUploadInput');
+        const saveProfileBtn = document.getElementById('saveProfileBtn');
+
+        async function fetchMyProfile() {
+            try {
+                const res = await fetch(`${API}/api/user/${username}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.bio) document.getElementById('profileBioInput').value = data.bio;
+                    
+                    const avatarImg = document.getElementById('profileAvatarImg');
+                    const avatarText = document.getElementById('profileAvatarText');
+                    if (data.avatar_url) {
+                        avatarImg.src = data.avatar_url;
+                        avatarImg.style.display = 'block';
+                        avatarText.style.display = 'none';
+                        
+                        // Update widget as well
+                        const myWidgetAvatar = document.getElementById('myWidgetAvatar');
+                        myWidgetAvatar.innerHTML = `<img src="${data.avatar_url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+                    }
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        async function updateProfile(updateData) {
+            try {
+                const res = await fetch(`${API}/api/profile`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(updateData)
+                });
+                if (res.ok) {
+                    fetchMyProfile();
+                } else {
+                    alert('Failed to update profile');
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        profileAvatar.addEventListener('click', () => avatarUploadInput.click());
+        avatarUploadInput.addEventListener('change', async (e) => {
+            if (e.target.files.length > 0) {
+                const formData = new FormData();
+                formData.append('file', e.target.files[0]);
+                try {
+                    const res = await fetch(`${API}/upload`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        body: formData
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.file_url) {
+                        updateProfile({ avatar_url: data.file_url });
+                    }
+                } catch (e) { console.error("Avatar upload failed:", e); }
+            }
+        });
+
+        saveProfileBtn.addEventListener('click', () => {
+            const bio = document.getElementById('profileBioInput').value;
+            updateProfile({ bio });
+            saveProfileBtn.textContent = 'Saved!';
+            setTimeout(() => saveProfileBtn.textContent = 'Save Bio', 2000);
+        });
 
         function openProfile() {
             document.getElementById('profileUsername').textContent = username;
             const avatar = document.getElementById('profileAvatar');
             avatar.style.background = COLORS[username.charCodeAt(0) % COLORS.length];
-            avatar.textContent = username[0].toUpperCase();
+            document.getElementById('profileAvatarText').textContent = username[0].toUpperCase();
+            
+            fetchMyProfile();
             profileOverlay.classList.add('open');
         }
 
@@ -682,7 +759,8 @@
                 const cardContent = document.createElement('div');
                 cardContent.className = 'chat-card-content';
                 
-                const avWrapper = avatarDiv(conv.with);
+                const userObj = allUsers.find(u => u.username === conv.with) || conv.with;
+                const avWrapper = avatarDiv(userObj);
                 cardContent.appendChild(avWrapper);
 
                 const info = document.createElement('div');
@@ -749,8 +827,25 @@
 
             // Set Header details
             activeName.textContent = withUser;
-            activeAvatar.textContent = withUser[0].toUpperCase();
-            activeAvatar.style.background = getAvatarColor(withUser);
+            const activeBio = document.getElementById('active-user-bio');
+            const userObj = allUsers.find(u => u.username === withUser);
+            
+            if (userObj && userObj.avatar_url) {
+                activeAvatar.innerHTML = `<img src="${userObj.avatar_url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+                activeAvatar.style.background = 'transparent';
+            } else {
+                activeAvatar.innerHTML = '';
+                activeAvatar.textContent = withUser[0].toUpperCase();
+                activeAvatar.style.background = getAvatarColor(withUser);
+            }
+            
+            if (userObj && userObj.bio) {
+                activeBio.textContent = userObj.bio;
+                activeBio.style.display = 'block';
+            } else {
+                activeBio.style.display = 'none';
+            }
+            
             updateActiveUserPresence(onlineUsers.has(withUser));
 
             // Load messages and register socket listeners

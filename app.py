@@ -47,10 +47,20 @@ class User(db.Model):
     id            = db.Column(db.Integer, primary_key=True)
     username      = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
+    avatar_url    = db.Column(db.String(255), nullable=True)
+    bio           = db.Column(db.String(255), nullable=True)
 
     def __init__(self, username, password_hash):
         self.username      = username
         self.password_hash = password_hash
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'avatar_url': self.avatar_url,
+            'bio': self.bio
+        }
 
 
 class Conversation(db.Model):
@@ -220,7 +230,38 @@ def get_users():
         return jsonify({'message': 'Unauthorized'}), 401
 
     users = db.session.scalars(db.select(User)).all()
-    return jsonify([u.username for u in users if u.username != me]), 200
+    return jsonify([u.to_dict() for u in users if u.username != me]), 200
+
+
+@app.route('/api/user/<username>', methods=['GET'])
+def get_user_profile(username):
+    """Return public profile for a user."""
+    user = db.session.scalar(db.select(User).filter_by(username=username))
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+    return jsonify(user.to_dict()), 200
+
+
+@app.route('/api/profile', methods=['PUT'])
+def update_profile():
+    """Update authenticated user's profile."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    me    = verify_token(token)
+    if not me:
+        return jsonify({'message': 'Unauthorized'}), 401
+
+    data = request.get_json()
+    user = db.session.scalar(db.select(User).filter_by(username=me))
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    if 'avatar_url' in data:
+        user.avatar_url = data['avatar_url']
+    if 'bio' in data:
+        user.bio = data['bio']
+
+    db.session.commit()
+    return jsonify({'message': 'Profile updated successfully', 'user': user.to_dict()}), 200
 
 
 @app.route('/conversations', methods=['GET'])
