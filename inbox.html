@@ -157,7 +157,18 @@
     <div class="overlay" id="overlay">
         <div class="modal">
             <div class="modal-handle"></div>
-            <h3>New Message</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 style="margin:0;">New Message</h3>
+                <button id="toggleGroupBtn" style="background: none; border: none; color: var(--accent); font-weight: 600; cursor: pointer;">Create Group</button>
+            </div>
+            
+            <div id="groupDetails" style="display: none; flex-direction: column; gap: 8px; margin-bottom: 12px;">
+                <input class="user-search" id="groupNameInput" type="text" placeholder="Group Name">
+                <div style="font-size: 13px; color: var(--text-secondary);">Select members below:</div>
+                <div id="selectedGroupMembers" style="display: flex; flex-wrap: wrap; gap: 4px; min-height: 24px;"></div>
+                <button id="createGroupSubmitBtn" style="background: var(--accent); color: white; border: none; border-radius: 20px; padding: 8px 16px; font-weight: 600; cursor: pointer; align-self: flex-end;" disabled>Create Group</button>
+            </div>
+
             <input class="user-search" id="userSearchInput" type="text" placeholder="Search people…">
             <div class="user-list" id="userList"></div>
         </div>
@@ -192,7 +203,10 @@
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script>
-        const API = window.location.origin;
+        // Support VS Code Live Server by defaulting to Flask backend port 5000
+        const API = (window.location.port === '5500' || window.location.protocol === 'file:') 
+            ? 'http://127.0.0.1:5000' 
+            : window.location.origin;
 
         // ── Auth guard ──────────────────────────────────────────────────
         const username = localStorage.getItem('chat_username');
@@ -426,13 +440,41 @@
 
         socket.on('receive_private_message', (data) => {
             if (data.conversation_id === currentConvId) {
-                appendMessage(data.username, data.text, data.timestamp, true, data.read, data.file_url, data.file_type, data.message_id, data.reactions);
+                appendMessage(data.username, data.text, data.timestamp, true, data.read, data.file_url, data.file_type, data.message_id, data.reactions, data.is_edited, data.is_deleted);
                 scrollToBottom();
 
                 // If message is from the other user, mark as read immediately and play chime
                 if (data.username === currentWithUser) {
                     AudioFX.playReceive();
                     socket.emit('mark_read', { token: token, conversation_id: currentConvId });
+                }
+            }
+        });
+
+        socket.on('message_edited', (data) => {
+            const row = document.querySelector(`.msg-row[data-message-id="${data.message_id}"]`);
+            if (row) {
+                const bubble = row.querySelector('.msg-bubble');
+                if (bubble && !row.classList.contains('deleted-message')) {
+                    bubble.textContent = data.text;
+                    bubble.dataset.originalText = data.text;
+                    if (!bubble.querySelector('.edited-tag')) {
+                        const tag = document.createElement('span');
+                        tag.className = 'edited-tag';
+                        tag.textContent = ' (edited)';
+                        bubble.appendChild(tag);
+                    }
+                }
+            }
+        });
+
+        socket.on('message_deleted', (data) => {
+            const row = document.querySelector(`.msg-row[data-message-id="${data.message_id}"]`);
+            if (row) {
+                row.classList.add('deleted-message');
+                const bubbleWrapper = row.querySelector('.msg-bubble-wrapper');
+                if (bubbleWrapper) {
+                    bubbleWrapper.innerHTML = `<div class="msg-bubble deleted">🚫 This message was deleted</div>`;
                 }
             }
         });
@@ -464,17 +506,28 @@
         // ── Helpers ──────────────────────────────────────────────────
         function scrollToBottom() { chatBox.scrollTop = chatBox.scrollHeight; }
 
-        function getAvatarColor(name) { return COLORS[name.charCodeAt(0) % COLORS.length]; }
+        function getAvatarColor(name) { 
+            if (!name) return COLORS[0];
+            return COLORS[name.charCodeAt(0) % COLORS.length]; 
+        }
 
-        function avatarDiv(name) {
+        function avatarDiv(userOrName) {
             const container = document.createElement('div');
             container.className = 'avatar-wrapper';
-            container.dataset.username = name;
+            
+            const nameStr = typeof userOrName === 'string' ? userOrName : (userOrName ? userOrName.username : '?');
+            container.dataset.username = nameStr;
 
             const div = document.createElement('div');
             div.className = 'avatar';
-            div.style.background = getAvatarColor(name);
-            div.textContent = name[0].toUpperCase();
+            
+            if (typeof userOrName === 'object' && userOrName && userOrName.avatar_url) {
+                div.innerHTML = `<img src="${userOrName.avatar_url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+                div.style.background = 'transparent';
+            } else {
+                div.style.background = getAvatarColor(nameStr);
+                div.textContent = nameStr ? nameStr[0].toUpperCase() : '?';
+            }
 
             const dot = document.createElement('div');
             dot.className = 'status-dot';
@@ -519,11 +572,12 @@
             `;
         }
 
-        function appendMessage(msgUsername, text, timeStr, animate = true, isRead = false, fileUrl = null, fileType = null, messageId = null, reactions = {}) {
+        function appendMessage(msgUsername, text, timeStr, animate = true, isRead = false, fileUrl = null, fileType = null, messageId = null, reactions = {}, isEdited = false, isDeleted = false) {
             const isMe = (msgUsername === username);
             const row  = document.createElement('div');
             row.className = 'msg-row ' + (isMe ? 'me' : 'other');
             if (messageId) row.dataset.messageId = messageId;
+            if (isDeleted) row.classList.add('deleted-message');
             if (animate) row.classList.add('new-bubble');
 
             if (!isMe) {
@@ -538,7 +592,12 @@
 
             let bubbleElement;
 
-            if (fileUrl && fileType === 'image') {
+            if (isDeleted) {
+                const bubble = document.createElement('div');
+                bubble.className   = 'msg-bubble deleted';
+                bubble.textContent = '🚫 This message was deleted';
+                bubbleElement = bubble;
+            } else if (fileUrl && fileType === 'image') {
                 const img = document.createElement('img');
                 img.src       = `${API}${fileUrl}`;
                 img.className = 'msg-image';
@@ -568,13 +627,19 @@
                 const bubble = document.createElement('div');
                 bubble.className   = 'msg-bubble';
                 bubble.textContent = text;
+                if (isEdited) {
+                    const tag = document.createElement('span');
+                    tag.className = 'edited-tag';
+                    tag.textContent = ' (edited)';
+                    bubble.appendChild(tag);
+                }
                 bubble.dataset.originalText = text;
                 bubbleElement = bubble;
             }
 
             bubbleWrapper.appendChild(bubbleElement);
 
-            if (messageId) {
+            if (messageId && !isDeleted) {
                 const reactTrigger = document.createElement('button');
                 reactTrigger.className = 'msg-react-trigger';
                 reactTrigger.innerHTML = '😀';
@@ -593,6 +658,36 @@
                 rxContainer.id = `rx-container-${messageId}`;
                 renderReactionCapsules(rxContainer, reactions, messageId);
                 bubbleWrapper.appendChild(rxContainer);
+                
+                if (isMe) {
+                    const actionsContainer = document.createElement('div');
+                    actionsContainer.className = 'msg-actions-menu';
+                    
+                    const editBtn = document.createElement('button');
+                    editBtn.innerHTML = '✎';
+                    editBtn.title = 'Edit message';
+                    editBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        const newText = prompt("Edit your message:", bubbleElement.dataset.originalText || text);
+                        if (newText !== null && newText.trim() !== "") {
+                            socket.emit('edit_message', { token: token, message_id: messageId, text: newText });
+                        }
+                    };
+
+                    const delBtn = document.createElement('button');
+                    delBtn.innerHTML = '🗑';
+                    delBtn.title = 'Delete message';
+                    delBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        if (confirm("Are you sure you want to delete this message?")) {
+                            socket.emit('delete_message', { token: token, message_id: messageId });
+                        }
+                    };
+                    
+                    if (!fileUrl) actionsContainer.appendChild(editBtn); // only text msgs can be edited for now
+                    actionsContainer.appendChild(delBtn);
+                    bubbleWrapper.appendChild(actionsContainer);
+                }
             }
 
             row.appendChild(bubbleWrapper);
@@ -690,7 +785,7 @@
                     divider.className   = 'history-divider';
                     divider.innerHTML   = `<span class="history-divider-label">${msgs.length} previous messages</span>`;
                     chatBox.appendChild(divider);
-                    msgs.forEach(m => appendMessage(m.username, m.text, m.timestamp, false, m.read, m.file_url, m.file_type, m.id, m.reactions));
+                    msgs.forEach(m => appendMessage(m.username, m.text, m.timestamp, false, m.read, m.file_url, m.file_type, m.id, m.reactions, m.is_edited, m.is_deleted));
                     scrollToBottom();
                 } else {
                     chatBox.innerHTML = `
@@ -759,8 +854,21 @@
                 const cardContent = document.createElement('div');
                 cardContent.className = 'chat-card-content';
                 
-                const userObj = allUsers.find(u => u.username === conv.with) || conv.with;
-                const avWrapper = avatarDiv(userObj);
+                let avWrapper;
+                if (conv.is_group) {
+                    const container = document.createElement('div');
+                    container.className = 'avatar-wrapper';
+                    const div = document.createElement('div');
+                    div.className = 'avatar';
+                    div.style.background = 'linear-gradient(135deg, #6e8efb, #a777e3)';
+                    div.style.fontSize = '18px';
+                    div.textContent = '👥';
+                    container.appendChild(div);
+                    avWrapper = container;
+                } else {
+                    const userObj = allUsers.find(u => u.username === conv.with) || conv.with;
+                    avWrapper = avatarDiv(userObj);
+                }
                 cardContent.appendChild(avWrapper);
 
                 const info = document.createElement('div');
@@ -768,8 +876,9 @@
 
                 const meta = document.createElement('div');
                 meta.className = 'chat-meta';
+                const nameStr = conv.is_group ? conv.name : conv.with;
                 meta.innerHTML = `
-                    <span class="chat-name">${conv.with}</span>
+                    <span class="chat-name">${nameStr}</span>
                     <span class="chat-time">${conv.last_timestamp}</span>`;
                 
                 const badgeHtml = conv.unread_count > 0 ? `<span class="badge-unread">${conv.unread_count}</span>` : '';
@@ -784,7 +893,7 @@
                 cardContent.appendChild(info);
                 card.appendChild(cardContent);
 
-                card.addEventListener('click', () => openConversation(conv.id, conv.with));
+                card.addEventListener('click', () => openConversation(conv.id, conv));
                 chatList.appendChild(card);
             });
             updatePresenceIndicators();
@@ -812,13 +921,13 @@
         });
 
         // ── Open Conversation SPA Routing ────────────────────────────────
-        async function openConversation(id, withUser) {
+        async function openConversation(id, convObj) {
             if (currentConvId) {
                 socket.emit('leave_conversation', { conversation_id: currentConvId });
             }
 
             currentConvId = id;
-            currentWithUser = withUser;
+            currentWithUser = convObj.is_group ? convObj.name : convObj.with;
 
             // Update UI visibility
             emptyState.style.display = 'none';
@@ -826,27 +935,41 @@
             document.body.classList.add('chat-open'); // for mobile toggle
 
             // Set Header details
-            activeName.textContent = withUser;
+            activeName.textContent = currentWithUser;
             const activeBio = document.getElementById('active-user-bio');
-            const userObj = allUsers.find(u => u.username === withUser);
             
-            if (userObj && userObj.avatar_url) {
-                activeAvatar.innerHTML = `<img src="${userObj.avatar_url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
-                activeAvatar.style.background = 'transparent';
-            } else {
-                activeAvatar.innerHTML = '';
-                activeAvatar.textContent = withUser[0].toUpperCase();
-                activeAvatar.style.background = getAvatarColor(withUser);
-            }
-            
-            if (userObj && userObj.bio) {
-                activeBio.textContent = userObj.bio;
+            if (convObj.is_group) {
+                activeAvatar.innerHTML = '👥';
+                activeAvatar.style.background = 'linear-gradient(135deg, #6e8efb, #a777e3)';
+                activeAvatar.style.fontSize = '24px';
+                
+                activeBio.textContent = convObj.members.join(', ');
                 activeBio.style.display = 'block';
+                updateActiveUserPresence(true); // Groups are always "online"
+                document.getElementById('statusText').textContent = 'Group Chat';
+                document.getElementById('statusDot').style.background = '#34c759';
             } else {
-                activeBio.style.display = 'none';
+                activeAvatar.style.fontSize = '18px';
+                const userObj = allUsers.find(u => u.username === convObj.with);
+                
+                if (userObj && userObj.avatar_url) {
+                    activeAvatar.innerHTML = `<img src="${userObj.avatar_url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+                    activeAvatar.style.background = 'transparent';
+                } else {
+                    activeAvatar.innerHTML = '';
+                    activeAvatar.textContent = convObj.with[0].toUpperCase();
+                    activeAvatar.style.background = getAvatarColor(convObj.with);
+                }
+                
+                if (userObj && userObj.bio) {
+                    activeBio.textContent = userObj.bio;
+                    activeBio.style.display = 'block';
+                } else {
+                    activeBio.style.display = 'none';
+                }
+                
+                updateActiveUserPresence(onlineUsers.has(convObj.with));
             }
-            
-            updateActiveUserPresence(onlineUsers.has(withUser));
 
             // Load messages and register socket listeners
             messageInput.disabled = false;
@@ -1066,21 +1189,92 @@
 
         // ── New Chat Modal Logic ─────────────────────────────────────────
         let allUsers = [];
+        let isCreatingGroup = false;
+        let selectedGroupMembers = new Set();
+        
         const overlay = document.getElementById('overlay');
         const newChatBtn = document.getElementById('newChatBtn');
+        const toggleGroupBtn = document.getElementById('toggleGroupBtn');
+        const groupDetails = document.getElementById('groupDetails');
+        const createGroupSubmitBtn = document.getElementById('createGroupSubmitBtn');
+        const selectedGroupMembersDiv = document.getElementById('selectedGroupMembers');
+        const groupNameInput = document.getElementById('groupNameInput');
 
-        newChatBtn.addEventListener('click', () => { loadUsers(); overlay.classList.add('open'); });
+        newChatBtn.addEventListener('click', () => { 
+            isCreatingGroup = false;
+            selectedGroupMembers.clear();
+            groupNameInput.value = '';
+            if (toggleGroupBtn) toggleGroupBtn.textContent = 'Create Group';
+            if (groupDetails) groupDetails.style.display = 'none';
+            loadUsers(); 
+            overlay.classList.add('open'); 
+        });
+        
         overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
         function closeModal() { overlay.classList.remove('open'); }
+
+        if (toggleGroupBtn) {
+            toggleGroupBtn.addEventListener('click', () => {
+                isCreatingGroup = !isCreatingGroup;
+                if (isCreatingGroup) {
+                    toggleGroupBtn.textContent = 'Cancel Group';
+                    groupDetails.style.display = 'flex';
+                    renderUsers(allUsers); // Re-render to show group selection UI
+                } else {
+                    toggleGroupBtn.textContent = 'Create Group';
+                    groupDetails.style.display = 'none';
+                    selectedGroupMembers.clear();
+                    updateSelectedMembersUI();
+                    renderUsers(allUsers);
+                }
+            });
+        }
+
+        if (groupNameInput) {
+            groupNameInput.addEventListener('input', updateCreateGroupBtnState);
+        }
+
+        function updateCreateGroupBtnState() {
+            if (createGroupSubmitBtn) {
+                createGroupSubmitBtn.disabled = !(groupNameInput.value.trim() && selectedGroupMembers.size >= 1);
+            }
+        }
+
+        function updateSelectedMembersUI() {
+            if (!selectedGroupMembersDiv) return;
+            selectedGroupMembersDiv.innerHTML = '';
+            selectedGroupMembers.forEach(uname => {
+                const badge = document.createElement('span');
+                badge.style.cssText = 'background: rgba(0,122,255,0.1); color: #007aff; padding: 2px 8px; border-radius: 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;';
+                badge.innerHTML = `<span>${uname}</span><button style="background:none; border:none; color:inherit; cursor:pointer; font-size:14px; line-height:1; padding:0;">&times;</button>`;
+                badge.querySelector('button').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectedGroupMembers.delete(uname);
+                    updateSelectedMembersUI();
+                    renderUsers(allUsers);
+                    updateCreateGroupBtnState();
+                });
+                selectedGroupMembersDiv.appendChild(badge);
+            });
+            updateCreateGroupBtnState();
+        }
 
         async function loadUsers() {
             try {
                 const res = await fetch(`${API}/users`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                allUsers = await res.json();
+                const data = await res.json();
+                if (!res.ok) {
+                    allUsers = [];
+                    document.getElementById('userList').innerHTML = `<div class="state-msg" style="padding:24px; color:red;"><p>Error: ${data.message || res.statusText}</p></div>`;
+                    return;
+                }
+                allUsers = Array.isArray(data) ? data : [];
             } catch (e) {
                 allUsers = [];
+                document.getElementById('userList').innerHTML = `<div class="state-msg" style="padding:24px; color:red;"><p>Network error loading users.</p></div>`;
+                return;
             }
             renderUsers(allUsers);
         }
@@ -1094,21 +1288,64 @@
             }
             users.forEach(u => {
                 const item = document.createElement('div');
-                item.className = 'user-item';
+                item.className = 'user-item' + (isCreatingGroup && selectedGroupMembers.has(u.username) ? ' active-group-member' : '');
+                
+                if (isCreatingGroup && selectedGroupMembers.has(u.username)) {
+                    item.style.background = 'rgba(0,122,255,0.05)';
+                    item.style.borderColor = 'rgba(0,122,255,0.2)';
+                }
+
                 item.appendChild(avatarDiv(u));
                 const name = document.createElement('span');
                 name.className = 'user-item-name';
-                name.textContent = u;
+                name.textContent = u.username;
                 item.appendChild(name);
-                item.addEventListener('click', () => startNewChat(u));
+                
+                item.addEventListener('click', () => {
+                    if (isCreatingGroup) {
+                        if (selectedGroupMembers.has(u.username)) {
+                            selectedGroupMembers.delete(u.username);
+                        } else {
+                            selectedGroupMembers.add(u.username);
+                        }
+                        updateSelectedMembersUI();
+                        renderUsers(allUsers); // Re-render to update highlights
+                    } else {
+                        startNewChat(u.username);
+                    }
+                });
                 ul.appendChild(item);
             });
             updatePresenceIndicators();
         }
 
+        if (createGroupSubmitBtn) {
+            createGroupSubmitBtn.addEventListener('click', async () => {
+                if (!groupNameInput.value.trim() || selectedGroupMembers.size === 0) return;
+                
+                closeModal();
+                const res = await fetch(`${API}/api/conversations/group`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ name: groupNameInput.value.trim(), members: Array.from(selectedGroupMembers) })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    await loadConversations();
+                    const convObj = allConversations.find(c => c.id === data.conversation_id);
+                    if (convObj) {
+                        openConversation(data.conversation_id, convObj);
+                    }
+                }
+            });
+        }
+
         document.getElementById('userSearchInput').addEventListener('input', (e) => {
             const q = e.target.value.toLowerCase();
-            renderUsers(allUsers.filter(u => u.toLowerCase().includes(q)));
+            renderUsers(allUsers.filter(u => u.username.toLowerCase().includes(q)));
         });
 
         async function startNewChat(otherUser) {

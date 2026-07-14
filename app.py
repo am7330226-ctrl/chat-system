@@ -13,6 +13,7 @@ import os, uuid
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-fallback-change-in-prod')
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-key-fallback-change-in-prod')
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0 # Prevent caching HTML/CSS/JS
 CORS(app, origins="*")
 
 # File upload configuration
@@ -130,6 +131,8 @@ class Message(db.Model):
     read            = db.Column(db.Boolean, default=False, nullable=False)
     file_url        = db.Column(db.String(300), nullable=True)   # path to uploaded file
     file_type       = db.Column(db.String(20),  nullable=True)   # 'image' | 'file'
+    is_edited       = db.Column(db.Boolean, default=False, nullable=False)
+    is_deleted      = db.Column(db.Boolean, default=False, nullable=False)
 
     def __init__(self, conversation_id, sender_username, content,
                  read=False, file_url=None, file_type=None):
@@ -150,12 +153,14 @@ class Message(db.Model):
         return {
             'id':        self.id,
             'username':  self.sender_username,
-            'text':      self.content,
+            'text':      self.content if not self.is_deleted else '🚫 This message was deleted',
             'timestamp': self.timestamp.strftime('%H:%M'),
             'read':      self.read,
-            'file_url':  self.file_url,
-            'file_type': self.file_type,
+            'file_url':  self.file_url if not self.is_deleted else None,
+            'file_type': self.file_type if not self.is_deleted else None,
             'reactions': rx_dict,
+            'is_edited': self.is_edited,
+            'is_deleted': self.is_deleted,
         }
 
 
@@ -642,6 +647,52 @@ def handle_add_reaction(data):
     emit('message_reaction_updated', {
         'message_id': message_id,
         'reactions':  rx_dict
+    }, to=room)
+
+@socketio.on('edit_message')
+def handle_edit_message(data):
+    token = data.get('token', '')
+    message_id = data.get('message_id')
+    new_text = data.get('text', '').strip()
+    me = verify_token(token)
+    
+    if not me or not message_id or not new_text:
+        return
+        
+    msg = db.session.get(Message, message_id)
+    if not msg or msg.sender_username != me:
+        return
+        
+    msg.content = new_text
+    msg.is_edited = True
+    db.session.commit()
+    
+    room = f'conv_{msg.conversation_id}'
+    emit('message_edited', {
+        'message_id': msg.id,
+        'text': new_text
+    }, to=room)
+
+@socketio.on('delete_message')
+def handle_delete_message(data):
+    token = data.get('token', '')
+    message_id = data.get('message_id')
+    me = verify_token(token)
+    
+    if not me or not message_id:
+        return
+        
+    msg = db.session.get(Message, message_id)
+    if not msg or msg.sender_username != me:
+        return
+        
+    msg.is_deleted = True
+    db.session.commit()
+    
+    room = f'conv_{msg.conversation_id}'
+    emit('message_deleted', {
+        'message_id': msg.id,
+        'text': '🚫 This message was deleted'
     }, to=room)
 
 # ─── Run ─────────────────────────────────────────────────────────────────────
