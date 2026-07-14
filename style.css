@@ -650,6 +650,8 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.01);
     word-wrap: break-word;
     word-break: break-word;
+    min-width: fit-content;
+    max-width: 100%;
 }
 
 @keyframes bubble-entrance {
@@ -1192,19 +1194,17 @@ body.dark-theme .history-divider::before {
     position: relative;
     display: flex;
     align-items: center;
-    max-width: 80%;
-    width: max-content;
     gap: 8px;
     margin-top: 4px;
 }
 
 .msg-row.me .msg-bubble-wrapper {
     flex-direction: row-reverse;
-    align-self: flex-end;
+    justify-content: flex-end;
 }
 
 .msg-row.other .msg-bubble-wrapper {
-    align-self: flex-start;
+    justify-content: flex-start;
 }
 
 /* Reaction trigger button */
