@@ -1357,3 +1357,135 @@ body.dark-theme .emoji-picker-dropdown {
     box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(10px);
 }
+
+
+/* ==========================================================================
+   MOBILE RESPONSIVE LAYOUT
+   ========================================================================== */
+@media (max-width: 768px) {
+    body {
+        overflow: hidden;
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        padding: 0 !important;
+    }
+
+    .app-container {
+        flex-direction: column;
+        border-radius: 0;
+        border: none;
+        max-height: 100vh;
+        height: 100vh;
+        position: relative;
+    }
+
+    /* 1. Bottom Navigation (was Sidebar) */
+    .sidebar-rail {
+        order: 3;
+        width: 100%;
+        height: 64px;
+        flex-direction: row;
+        padding: 0 16px;
+        border-right: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.4);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        z-index: 100;
+        flex-shrink: 0;
+    }
+
+    .workspace-list {
+        flex-direction: row;
+        gap: 20px;
+    }
+
+    .logo-item {
+        margin-bottom: 0;
+        font-size: 20px;
+    }
+
+    .workspace-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+    }
+
+    .workspace-btn::before {
+        left: 50%;
+        top: -12px;
+        transform: translateX(-50%) scaleX(0.3);
+        width: 20px;
+        height: 4px;
+        border-radius: 0 0 4px 4px;
+    }
+
+    .workspace-btn.active::before,
+    .workspace-btn:hover::before {
+        transform: translateX(-50%) scaleX(1);
+    }
+
+    .rail-footer {
+        flex-direction: row;
+        gap: 16px;
+    }
+
+    .settings-btn {
+        margin-bottom: 0 !important;
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+    }
+
+    /* 2. Chat Explorer (Chat List) */
+    .chat-explorer {
+        order: 1;
+        width: 100%;
+        flex: 1;
+        border-right: none;
+        display: flex;
+        position: relative;
+    }
+
+    .explorer-header, .filter-tags {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    /* 3. Chat Workspace */
+    .chat-workspace {
+        order: 2;
+        width: 100%;
+        flex: 1;
+        display: none !important;
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        z-index: 50;
+        background: var(--glass-bg);
+        border-radius: 0;
+    }
+    
+    .chat-header {
+        padding: 0 16px;
+    }
+
+    /* 4. Active Chat View State (.chat-open) */
+    body.chat-open .chat-explorer {
+        display: none !important;
+    }
+    
+    body.chat-open .chat-workspace {
+        display: flex !important;
+    }
+    
+    body.chat-open .sidebar-rail {
+        display: none !important;
+    }
+    
+    .composer-area {
+        padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0)) 16px;
+    }
+}
