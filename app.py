@@ -63,27 +63,46 @@ class User(db.Model):
         }
 
 
+class ConversationMember(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversation.id', ondelete='CASCADE'), nullable=False)
+    username = db.Column(db.String(80), nullable=False)
+
+    def __init__(self, conversation_id, username):
+        self.conversation_id = conversation_id
+        self.username = username
+
 class Conversation(db.Model):
-    """A private 1-on-1 conversation between two users.
-    Users are stored alphabetically so the pair is always unique."""
+    """A private 1-on-1 conversation between two users or a group chat."""
     id         = db.Column(db.Integer, primary_key=True)
-    user_a     = db.Column(db.String(80), nullable=False)   # alphabetically first
-    user_b     = db.Column(db.String(80), nullable=False)   # alphabetically second
+    is_group   = db.Column(db.Boolean, default=False)
+    name       = db.Column(db.String(80), nullable=True)
+    user_a     = db.Column(db.String(80), nullable=True)   # Legacy 1-on-1 field
+    user_b     = db.Column(db.String(80), nullable=True)   # Legacy 1-on-1 field
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     messages   = db.relationship('Message', backref='conversation', lazy=True,
                                  order_by='Message.timestamp')
+    members_rel = db.relationship('ConversationMember', backref='conversation_obj', lazy='joined', cascade='all, delete-orphan')
 
-    def __init__(self, user_a, user_b):
-        # Always store in alphabetical order so the pair is always unique
-        pair = sorted([user_a, user_b])
-        self.user_a = pair[0]
-        self.user_b = pair[1]
+    def __init__(self, user_a=None, user_b=None, is_group=False, name=None):
+        self.is_group = is_group
+        self.name = name
+        if user_a and user_b and not is_group:
+            pair = sorted([user_a, user_b])
+            self.user_a = pair[0]
+            self.user_b = pair[1]
 
     def involves(self, username):
-        return username in (self.user_a, self.user_b)
+        return any(m.username == username for m in self.members_rel)
 
     def other_user(self, username):
-        return self.user_b if self.user_a == username else self.user_a
+        for m in self.members_rel:
+            if m.username != username:
+                return m.username
+        return username
+
+    def get_members(self):
+        return [m.username for m in self.members_rel]
 
     def unread_count(self, for_user):
         return sum(1 for m in self.messages if not m.read and m.sender_username != for_user)
@@ -92,7 +111,10 @@ class Conversation(db.Model):
         last = self.messages[-1] if self.messages else None
         return {
             'id':            self.id,
-            'with':          self.other_user(for_user),
+            'is_group':      self.is_group,
+            'name':          self.name,
+            'with':          self.other_user(for_user) if not self.is_group else None,
+            'members':       self.get_members(),
             'last_message':  last.content if last else '',
             'last_timestamp': last.timestamp.strftime('%H:%M') if last else '',
             'unread_count':  self.unread_count(for_user),
@@ -169,15 +191,18 @@ def verify_token(token):
         return None
 
 def get_or_create_conversation(user_a, user_b):
-    """Return existing conversation or create a new one."""
+    """Return existing private conversation or create a new one."""
     pair = sorted([user_a, user_b])
     conv = db.session.scalar(
         db.select(Conversation)
-        .filter_by(user_a=pair[0], user_b=pair[1])
+        .filter_by(is_group=False, user_a=pair[0], user_b=pair[1])
     )
     if not conv:
-        conv = Conversation(user_a=pair[0], user_b=pair[1])
+        conv = Conversation(user_a=pair[0], user_b=pair[1], is_group=False)
         db.session.add(conv)
+        db.session.commit()
+        db.session.add(ConversationMember(conversation_id=conv.id, username=user_a))
+        db.session.add(ConversationMember(conversation_id=conv.id, username=user_b))
         db.session.commit()
     return conv
 
@@ -274,18 +299,17 @@ def get_conversations():
 
     convs = db.session.scalars(
         db.select(Conversation)
-        .where(
-            (Conversation.user_a == me) | (Conversation.user_b == me)
-        )
+        .join(ConversationMember)
+        .filter(ConversationMember.username == me)
         .order_by(Conversation.created_at.desc())
-    ).all()
+    ).unique().all()
 
     return jsonify([c.to_dict(me) for c in convs]), 200
 
 
 @app.route('/conversations', methods=['POST'])
 def create_or_get_conversation():
-    """Create or retrieve a conversation with another user."""
+    """Create or retrieve a private conversation with another user."""
     token      = request.headers.get('Authorization', '').replace('Bearer ', '')
     me         = verify_token(token)
     if not me:
@@ -302,7 +326,37 @@ def create_or_get_conversation():
         return jsonify({'message': 'User not found'}), 404
 
     conv = get_or_create_conversation(me, other_user)
-    return jsonify({'conversation_id': conv.id, 'with': other_user}), 200
+    return jsonify({'conversation_id': conv.id, 'with': other_user, 'is_group': False}), 200
+
+@app.route('/api/conversations/group', methods=['POST'])
+def create_group_conversation():
+    """Create a new group conversation."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    me    = verify_token(token)
+    if not me:
+        return jsonify({'message': 'Unauthorized'}), 401
+
+    data    = request.get_json()
+    name    = data.get('name', '').strip()
+    members = data.get('members', [])
+    
+    if not name:
+        return jsonify({'message': 'Group name required'}), 400
+    if not members or not isinstance(members, list):
+        return jsonify({'message': 'Members list required'}), 400
+        
+    if me not in members:
+        members.append(me)
+
+    conv = Conversation(is_group=True, name=name)
+    db.session.add(conv)
+    db.session.commit()
+    
+    for m in members:
+        db.session.add(ConversationMember(conversation_id=conv.id, username=m))
+    db.session.commit()
+    
+    return jsonify({'conversation_id': conv.id, 'is_group': True, 'name': name}), 200
 
 
 @app.route('/conversations/<int:conv_id>/messages', methods=['GET'])
