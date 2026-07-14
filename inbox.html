@@ -185,7 +185,7 @@
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script>
-        const API = 'http://127.0.0.1:5000';
+        const API = window.location.origin;
 
         // ── Auth guard ──────────────────────────────────────────────────
         const username = localStorage.getItem('chat_username');
@@ -627,6 +627,13 @@
                 const res = await fetch(`${API}/conversations`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                if (res.status === 401) {
+                    // Token expired — clear storage and redirect to login
+                    localStorage.removeItem('chat_username');
+                    localStorage.removeItem('chat_token');
+                    window.location.href = 'login.html';
+                    return;
+                }
                 allConversations = await res.json();
                 renderConversations(allConversations);
             } catch (e) {
