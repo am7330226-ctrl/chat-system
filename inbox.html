@@ -213,12 +213,26 @@
         const token    = localStorage.getItem('chat_token');
         if (!username || !token) { window.location.href = 'login.html'; }
 
+        // ── Security Helpers ─────────────────────────────────────────────
+        function escapeHTML(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>'"]/g, 
+                tag => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    "'": '&#39;',
+                    '"': '&quot;'
+                }[tag])
+            );
+        }
+
         // Set user info on cards
         document.getElementById('myWidgetName').textContent = username;
         const myWidgetAvatar = document.getElementById('myWidgetAvatar');
         const COLORS = ['#E8D5FF','#D5E8FF','#D5FFE8','#FFE8D5','#FFD5D5','#D5F0FF','#FFF5D5'];
         myWidgetAvatar.style.background = COLORS[username.charCodeAt(0) % COLORS.length];
-        myWidgetAvatar.textContent = username[0].toUpperCase();
+        myWidgetAvatar.textContent = escapeHTML(username[0].toUpperCase());
 
         // ── Navigation & Active State Management ─────────────────────────
         let currentConvId = null;
@@ -250,7 +264,7 @@
                         
                         // Update widget as well
                         const myWidgetAvatar = document.getElementById('myWidgetAvatar');
-                        myWidgetAvatar.innerHTML = `<img src="${data.avatar_url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+                        myWidgetAvatar.innerHTML = `<img src="${escapeHTML(data.avatar_url)}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
                     }
                 }
             } catch (e) { console.error(e); }
@@ -522,11 +536,11 @@
             div.className = 'avatar';
             
             if (typeof userOrName === 'object' && userOrName && userOrName.avatar_url) {
-                div.innerHTML = `<img src="${userOrName.avatar_url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+                div.innerHTML = `<img src="${escapeHTML(userOrName.avatar_url)}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
                 div.style.background = 'transparent';
             } else {
                 div.style.background = getAvatarColor(nameStr);
-                div.textContent = nameStr ? nameStr[0].toUpperCase() : '?';
+                div.textContent = nameStr ? escapeHTML(nameStr[0].toUpperCase()) : '?';
             }
 
             const dot = document.createElement('div');
@@ -613,7 +627,7 @@
                 link.innerHTML = `
                     <span class="msg-file-icon">📎</span>
                     <div>
-                        <div class="msg-file-name">${text !== '[file]' ? text : filename}</div>
+                        <div class="msg-file-name">${escapeHTML(text !== '[file]' ? text : filename)}</div>
                         <div class="msg-file-label">Tap to download</div>
                     </div>`;
                 bubbleElement = link;
@@ -715,7 +729,7 @@
                 if (users.includes(username)) {
                     badge.classList.add('my-reaction');
                 }
-                badge.innerHTML = `<span class="rx-emoji">${emoji}</span> <span class="rx-count">${users.length}</span>`;
+                badge.innerHTML = `<span class="rx-emoji">${escapeHTML(emoji)}</span> <span class="rx-count">${escapeHTML(users.length)}</span>`;
                 badge.title = users.join(', ');
 
                 badge.addEventListener('click', (e) => {
@@ -878,14 +892,14 @@
                 meta.className = 'chat-meta';
                 const nameStr = conv.is_group ? conv.name : conv.with;
                 meta.innerHTML = `
-                    <span class="chat-name">${nameStr}</span>
-                    <span class="chat-time">${conv.last_timestamp}</span>`;
+                    <span class="chat-name">${escapeHTML(nameStr)}</span>
+                    <span class="chat-time">${escapeHTML(conv.last_timestamp)}</span>`;
                 
-                const badgeHtml = conv.unread_count > 0 ? `<span class="badge-unread">${conv.unread_count}</span>` : '';
+                const badgeHtml = conv.unread_count > 0 ? `<span class="badge-unread">${escapeHTML(conv.unread_count)}</span>` : '';
                 const preview = document.createElement('div');
                 preview.className = 'chat-preview';
                 preview.innerHTML = `
-                    <span class="chat-preview-text">${conv.last_message || 'No messages yet'}</span>
+                    <span class="chat-preview-text">${escapeHTML(conv.last_message || 'No messages yet')}</span>
                     ${badgeHtml}`;
 
                 info.appendChild(meta);
@@ -956,11 +970,11 @@
                 const userObj = allUsers.find(u => u.username === convObj.with);
                 
                 if (userObj && userObj.avatar_url) {
-                    activeAvatar.innerHTML = `<img src="${userObj.avatar_url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+                    activeAvatar.innerHTML = `<img src="${escapeHTML(userObj.avatar_url)}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
                     activeAvatar.style.background = 'transparent';
                 } else {
                     activeAvatar.innerHTML = '';
-                    activeAvatar.textContent = convObj.with[0].toUpperCase();
+                    activeAvatar.textContent = escapeHTML(convObj.with[0].toUpperCase());
                     activeAvatar.style.background = getAvatarColor(convObj.with);
                 }
                 
@@ -1183,7 +1197,7 @@
                 if (textLower.includes(q)) {
                     row.style.display = 'flex';
                     const regex = new RegExp(`(${escapeRegExp(chatSearchInput.value.trim())})`, 'gi');
-                    bubble.innerHTML = originalText.replace(regex, '<mark style="background: #ffe066; color: #111; padding: 2px 0; border-radius: 2px;">$1</mark>');
+                    bubble.innerHTML = escapeHTML(originalText).replace(regex, '<mark style="background: #ffe066; color: #111; padding: 2px 0; border-radius: 2px;">$1</mark>');
                 } else {
                     row.style.display = 'none';
                 }
@@ -1249,7 +1263,7 @@
             selectedGroupMembers.forEach(uname => {
                 const badge = document.createElement('span');
                 badge.style.cssText = 'background: rgba(0,122,255,0.1); color: #007aff; padding: 2px 8px; border-radius: 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;';
-                badge.innerHTML = `<span>${uname}</span><button style="background:none; border:none; color:inherit; cursor:pointer; font-size:14px; line-height:1; padding:0;">&times;</button>`;
+                badge.innerHTML = `<span>${escapeHTML(uname)}</span><button style="background:none; border:none; color:inherit; cursor:pointer; font-size:14px; line-height:1; padding:0;">&times;</button>`;
                 badge.querySelector('button').addEventListener('click', (e) => {
                     e.stopPropagation();
                     selectedGroupMembers.delete(uname);

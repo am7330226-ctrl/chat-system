@@ -8,7 +8,7 @@ from flask_jwt_extended import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime, timezone
-import os, uuid
+import os, uuid, re
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-fallback-change-in-prod')
@@ -222,6 +222,9 @@ def register():
     if not username or not password:
         return jsonify({'message': 'Username and password are required'}), 400
 
+    if not re.match(r'^[a-zA-Z0-9_]{3,80}$', username):
+        return jsonify({'message': 'Username must be 3-80 characters and contain only letters, numbers, and underscores'}), 400
+
     if db.session.scalar(db.select(User).filter_by(username=username)):
         return jsonify({'message': 'Username already exists'}), 409
 
@@ -286,8 +289,12 @@ def update_profile():
         return jsonify({'message': 'User not found'}), 404
 
     if 'avatar_url' in data:
+        if len(data['avatar_url']) > 255:
+            return jsonify({'message': 'Avatar URL cannot exceed 255 characters'}), 400
         user.avatar_url = data['avatar_url']
     if 'bio' in data:
+        if len(data['bio']) > 255:
+            return jsonify({'message': 'Bio cannot exceed 255 characters'}), 400
         user.bio = data['bio']
 
     db.session.commit()
@@ -347,6 +354,8 @@ def create_group_conversation():
     
     if not name:
         return jsonify({'message': 'Group name required'}), 400
+    if len(name) > 80:
+        return jsonify({'message': 'Group name cannot exceed 80 characters'}), 400
     if not members or not isinstance(members, list):
         return jsonify({'message': 'Members list required'}), 400
         
@@ -611,6 +620,9 @@ def handle_add_reaction(data):
 
     me = verify_token(token)
     if not me or not message_id or not emoji:
+        return
+        
+    if len(emoji) > 10:
         return
 
     msg = db.session.get(Message, message_id)
