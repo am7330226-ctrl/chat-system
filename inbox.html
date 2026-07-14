@@ -142,6 +142,7 @@
                             <button class="composer-btn" type="button" id="attachBtn" title="Add Attachment">📎</button>
                             <textarea class="composer-textarea" id="messageInput" placeholder="Type a message..." disabled rows="1"></textarea>
                             <div class="composer-btn-group">
+                                <button class="composer-btn" type="button" id="micBtn" title="Record Audio" disabled>🎙️</button>
                                 <button class="composer-btn composer-send-btn" id="sendBtn" type="submit" disabled title="Send Message">🕊️</button>
                             </div>
                         </div>
@@ -480,6 +481,12 @@
                         <div class="msg-file-label">Tap to download</div>
                     </div>`;
                 bubbleElement = link;
+            } else if (fileUrl && fileType === 'audio') {
+                const audio = document.createElement('audio');
+                audio.controls = true;
+                audio.src = `${API}${fileUrl}`;
+                audio.className = 'msg-audio';
+                bubbleElement = audio;
             } else {
                 const bubble = document.createElement('div');
                 bubble.className   = 'msg-bubble';
@@ -749,6 +756,7 @@
             // Load messages and register socket listeners
             messageInput.disabled = false;
             sendBtn.disabled = false;
+            document.getElementById('micBtn').disabled = false;
             messageInput.focus();
 
             await loadHistory(id);
@@ -1060,6 +1068,79 @@
             localStorage.setItem('chat_theme', isDark ? 'dark' : 'light');
             themeToggleBtn.textContent = isDark ? '☀️' : '🌙';
         });
+
+        // ── Voice Notes Logic ────────────────────────────────────────────
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        const micBtn = document.getElementById('micBtn');
+
+        micBtn.addEventListener('click', async () => {
+            if (!currentConvId) return;
+
+            if (!isRecording) {
+                // Start recording
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.addEventListener('dataavailable', event => {
+                        audioChunks.push(event.data);
+                    });
+
+                    mediaRecorder.addEventListener('stop', async () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await sendVoiceNote(audioBlob);
+                    });
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    micBtn.classList.add('recording');
+                    messageInput.placeholder = "🔴 Recording... Click Mic to send";
+                    messageInput.disabled = true;
+                } catch (e) {
+                    console.error('Microphone access denied or error:', e);
+                    alert("Could not access microphone.");
+                }
+            } else {
+                // Stop recording
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                    mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                }
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                messageInput.placeholder = "Type a message...";
+                messageInput.disabled = false;
+            }
+        });
+
+        async function sendVoiceNote(blob) {
+            const formData = new FormData();
+            formData.append('file', blob, 'voicenote.webm');
+            
+            try {
+                const response = await fetch(`${API}/upload`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                });
+                const result = await response.json();
+                
+                if (response.ok && result.file_url) {
+                    socket.emit('send_private_message', {
+                        token:           token,
+                        conversation_id: currentConvId,
+                        text:            '[Voice Note]',
+                        file_url:        result.file_url,
+                        file_type:       result.file_type
+                    });
+                }
+            } catch (e) {
+                console.error("Upload voice note failed:", e);
+            }
+        }
 
         initTheme();
 

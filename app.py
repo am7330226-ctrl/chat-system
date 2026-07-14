@@ -17,7 +17,7 @@ CORS(app, origins="*")
 
 # File upload configuration
 UPLOAD_FOLDER = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'uploads')
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'txt', 'doc', 'docx', 'zip'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'txt', 'doc', 'docx', 'zip', 'webm', 'mp3', 'ogg', 'wav', 'm4a'}
 MAX_FILE_SIZE_MB = 10
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE_MB * 1024 * 1024
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -310,8 +310,13 @@ def upload_file():
     save_path = os.path.join(UPLOAD_FOLDER, unique)
     file.save(save_path)
 
-    file_url  = f'/uploads/{unique}'
-    file_type = 'image' if ext in {'png', 'jpg', 'jpeg', 'gif', 'webp'} else 'file'
+    if ext in {'png', 'jpg', 'jpeg', 'gif', 'webp'}:
+        file_type = 'image'
+    elif ext in {'webm', 'mp3', 'ogg', 'wav', 'm4a'}:
+        file_type = 'audio'
+    else:
+        file_type = 'file'
+
     return jsonify({'file_url': file_url, 'file_type': file_type, 'original_name': secure_filename(file.filename)}), 200
 
 
