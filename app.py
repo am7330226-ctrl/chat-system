@@ -251,7 +251,7 @@ def login():
         return jsonify({'message': 'Invalid username or password'}), 401
 
 
-@app.route('/users', methods=['GET'])
+@app.route('/api/users', methods=['GET'])
 def get_users():
     """Return all registered usernames (so users can discover who to chat with)."""
     token    = request.headers.get('Authorization', '').replace('Bearer ', '')

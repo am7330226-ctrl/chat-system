@@ -902,7 +902,10 @@
         // Search Filter Explorer
         document.getElementById('searchInput').addEventListener('input', (e) => {
             const q = e.target.value.toLowerCase();
-            renderConversations(allConversations.filter(c => c.with.toLowerCase().includes(q)));
+            renderConversations(allConversations.filter(c => {
+                const nameStr = c.is_group ? c.name : c.with;
+                return nameStr && nameStr.toLowerCase().includes(q);
+            }));
         });
 
         // ── Filter Toggles ───────────────────────────────────────────────
@@ -1261,7 +1264,7 @@
 
         async function loadUsers() {
             try {
-                const res = await fetch(`${API}/users`, {
+                const res = await fetch(`${API}/api/users`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await res.json();
