@@ -317,6 +317,8 @@ def upload_file():
     else:
         file_type = 'file'
 
+    file_url = f'/uploads/{unique}'
+
     return jsonify({'file_url': file_url, 'file_type': file_type, 'original_name': secure_filename(file.filename)}), 200
 
 
