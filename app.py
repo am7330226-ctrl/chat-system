@@ -600,7 +600,7 @@ def handle_send_private_message(data):
         'reactions':       {}
      }, to=room)
 
-    # Notify both users of a new message (for inbox badges and sound alerts)
+    # Notify all members of a new message (for inbox badges and sound alerts)
     notification_payload = {
         'conversation_id': conv_id,
         'username':        me,
@@ -609,8 +609,8 @@ def handle_send_private_message(data):
         'file_type':       file_type,
         'timestamp':       msg.timestamp.strftime('%H:%M')
     }
-    emit('new_message_notification', notification_payload, to=f"user_{conv.user_a}")
-    emit('new_message_notification', notification_payload, to=f"user_{conv.user_b}")
+    for member in conv.get_members():
+        emit('new_message_notification', notification_payload, to=f"user_{member}")
 
 @socketio.on('add_reaction')
 def handle_add_reaction(data):

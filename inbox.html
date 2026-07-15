@@ -847,7 +847,12 @@
             if (filterMode === 'Unread') {
                 filtered = convs.filter(c => c.unread_count > 0);
             } else if (filterMode === 'Online') {
-                filtered = convs.filter(c => onlineUsers.has(c.with));
+                filtered = convs.filter(c => {
+                    if (c.is_group) {
+                        return c.members && c.members.some(m => m !== username && onlineUsers.has(m));
+                    }
+                    return c.with && onlineUsers.has(c.with);
+                });
             }
 
             if (filtered.length === 0) {
@@ -1379,7 +1384,10 @@
             if (res.ok) {
                 // If it successfully created, reload conversations list and then select it
                 await loadConversations();
-                openConversation(data.conversation_id, otherUser);
+                const convObj = allConversations.find(c => c.id === data.conversation_id);
+                if (convObj) {
+                    openConversation(data.conversation_id, convObj);
+                }
             }
         }
 
@@ -1391,7 +1399,10 @@
             if (convId && withUser) {
                 // Wait for conversations to load first to ensure card highlight maps
                 await loadConversations();
-                openConversation(convId, withUser);
+                const convObj = allConversations.find(c => c.id === convId);
+                if (convObj) {
+                    openConversation(convId, convObj);
+                }
             } else {
                 loadConversations();
             }
