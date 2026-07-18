@@ -120,17 +120,21 @@ function ChatExplorer({
                     <span className="chat-name">{displayName}</span>
                     {conv.last_message && (
                       <span className="chat-time">
-                        {new Date(conv.last_message.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        {typeof conv.last_message === 'object' && conv.last_message.timestamp && !isNaN(new Date(conv.last_message.timestamp).getTime())
+                          ? new Date(conv.last_message.timestamp).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : (typeof conv.last_message === 'object' ? (conv.last_message.timestamp || '') : conv.last_timestamp || '')}
                       </span>
                     )}
                   </div>
                   <div className="chat-preview-row">
                     <span className="chat-preview">
                       {conv.last_message
-                        ? conv.last_message.is_deleted
+                        ? typeof conv.last_message === 'string'
+                          ? conv.last_message
+                          : conv.last_message.is_deleted
                           ? '🚫 Message deleted'
                           : conv.last_message.file_url
                           ? '📎 Attachment'

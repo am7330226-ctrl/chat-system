@@ -207,7 +207,9 @@ function ChatWorkspace({
                   )}
 
                   <div className="msg-time">
-                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {msg.timestamp && !isNaN(new Date(msg.timestamp).getTime())
+                      ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : msg.timestamp || ''}
                     {isMe && !msg.is_deleted && (
                       <span style={{ marginLeft: '4px', color: msg.read ? '#4f46e5' : 'var(--text-muted)' }}>
                         {msg.read ? '✓✓' : '✓'}
