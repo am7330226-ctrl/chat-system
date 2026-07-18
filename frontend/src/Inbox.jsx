@@ -39,7 +39,13 @@ function Inbox() {
     
     // Fetch my profile
     fetch(`/api/user/${user}`)
-      .then(res => res.json())
+      .then(res => {
+        if (res.status === 401 || res.status === 404) {
+          handleLogout();
+          throw new Error("Unauthorized or User not found");
+        }
+        return res.json();
+      })
       .then(data => setAvatarUrl(data.avatar_url))
       .catch(console.error);
 
@@ -77,19 +83,29 @@ function Inbox() {
     };
   }, [navigate]);
 
-  // Load active conversation messages when it changes
   useEffect(() => {
     if (activeConv && token && socketRef.current) {
       fetch(`/api/conversations/${activeConv.id}/messages`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
-      .then(res => res.json())
+      .then(res => {
+        if (res.status === 401) {
+          handleLogout();
+          throw new Error("Unauthorized");
+        }
+        return res.json();
+      })
       .then(data => {
-        setMessages(data);
+        if (Array.isArray(data)) {
+          setMessages(data);
+        } else {
+          setMessages([]);
+        }
         socketRef.current.emit('join_conversation', { token, conversation_id: activeConv.id });
         socketRef.current.emit('mark_read', { token, conversation_id: activeConv.id });
         loadConversations(token); // Update unread counts
-      });
+      })
+      .catch(console.error);
 
       // Clear typing users when switching chats
       setTypingUsers(new Set());
@@ -164,16 +180,40 @@ function Inbox() {
 
   const loadConversations = (tok) => {
     fetch('/api/conversations', { headers: { 'Authorization': `Bearer ${tok}` } })
-      .then(res => res.json())
-      .then(data => setConversations(data))
+      .then(res => {
+        if (res.status === 401) {
+          handleLogout();
+          throw new Error("Unauthorized");
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (Array.isArray(data)) {
+          setConversations(data);
+        } else {
+          setConversations([]);
+        }
+      })
       .catch(console.error);
   };
 
   const fetchUsers = () => {
     const tok = localStorage.getItem('chat_token');
     fetch('/api/users', { headers: { 'Authorization': `Bearer ${tok}` } })
-      .then(res => res.json())
-      .then(data => setAllUsers(data))
+      .then(res => {
+        if (res.status === 401) {
+          handleLogout();
+          throw new Error("Unauthorized");
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (Array.isArray(data)) {
+          setAllUsers(data);
+        } else {
+          setAllUsers([]);
+        }
+      })
       .catch(console.error);
   };
 

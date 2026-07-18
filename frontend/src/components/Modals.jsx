@@ -113,7 +113,7 @@ export function NewChatModal({ isOpen, onClose, allUsers, onStartChat, username,
     return COLORS[name.charCodeAt(0) % COLORS.length];
   };
 
-  const otherUsers = allUsers.filter(u => u.username !== username);
+  const otherUsers = Array.isArray(allUsers) ? allUsers.filter(u => u.username !== username) : [];
   const filteredUsers = otherUsers.filter(u => u.username.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const handleUserClick = (u) => {
