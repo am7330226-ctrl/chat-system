@@ -116,7 +116,7 @@ function ChatExplorer({
                 </div>
 
                 <div className="chat-info">
-                  <div className="chat-name-row">
+                  <div className="chat-meta">
                     <span className="chat-name">{displayName}</span>
                     {conv.last_message && (
                       <span className="chat-time">
@@ -129,8 +129,8 @@ function ChatExplorer({
                       </span>
                     )}
                   </div>
-                  <div className="chat-preview-row">
-                    <span className="chat-preview">
+                  <div className="chat-preview">
+                    <span className="chat-preview-text">
                       {conv.last_message
                         ? typeof conv.last_message === 'string'
                           ? conv.last_message
