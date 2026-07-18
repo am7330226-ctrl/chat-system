@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime, timezone
 import os, uuid, re
 
-app = Flask(__name__, static_folder='.', static_url_path='')
+app = Flask(__name__, static_folder='frontend/dist', static_url_path='/static')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-fallback-change-in-prod')
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-key-fallback-change-in-prod')
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0 # Prevent caching HTML/CSS/JS
@@ -23,9 +23,22 @@ MAX_FILE_SIZE_MB = 10
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE_MB * 1024 * 1024
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-@app.route('/')
-def index():
-    return app.send_static_file('login.html')
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_react(path):
+    print(f"serve_react called with path: '{path}'")
+    # Ignore API and upload routes in catch-all
+    if path.startswith('api/') or path.startswith('upload'):
+        print(f"Path starts with api/ or upload, returning 404")
+        return "Not Found", 404
+        
+    full_path = os.path.join(app.static_folder, path)
+    print(f"Checking if {full_path} exists: {os.path.exists(full_path)}")
+    if path != "" and os.path.exists(full_path):
+        return send_from_directory(app.static_folder, path)
+    else:
+        print(f"Returning index.html")
+        return send_from_directory(app.static_folder, 'index.html')
 
 # Database
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -213,7 +226,7 @@ def get_or_create_conversation(user_a, user_b):
 
 # ─── HTTP Routes ─────────────────────────────────────────────────────────────
 
-@app.route('/register', methods=['POST'])
+@app.route('/api/register', methods=['POST'])
 def register():
     data     = request.get_json()
     username = data.get('username', '').strip()
@@ -236,9 +249,9 @@ def register():
     return jsonify({'message': 'User registered successfully'}), 201
 
 
-@app.route('/login', methods=['POST'])
+@app.route('/api/login', methods=['POST'])
 def login():
-    data     = request.get_json()
+    data = request.get_json()
     username = data.get('username', '').strip()
     password = data.get('password', '')
 
