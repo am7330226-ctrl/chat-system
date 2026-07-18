@@ -29,7 +29,7 @@ def serve_react(path):
     print(f"serve_react called with path: '{path}'")
     # Ignore API and upload routes in catch-all
     if path.startswith('api/') or path.startswith('upload'):
-        print(f"Path starts with api/ or upload, returning 404")
+        print("Path starts with api/ or upload, returning 404")
         return "Not Found", 404
         
     full_path = os.path.join(app.static_folder, path)
@@ -37,7 +37,7 @@ def serve_react(path):
     if path != "" and os.path.exists(full_path):
         return send_from_directory(app.static_folder, path)
     else:
-        print(f"Returning index.html")
+        print("Returning index.html")
         return send_from_directory(app.static_folder, 'index.html')
 
 # Database
@@ -129,8 +129,8 @@ class Conversation(db.Model):
             'name':          self.name,
             'with':          self.other_user(for_user) if not self.is_group else None,
             'members':       self.get_members(),
-            'last_message':  last.content if last else '',
-            'last_timestamp': last.timestamp.strftime('%H:%M') if last else '',
+            'last_message':  last.to_dict() if last else None,
+            'last_timestamp': last.timestamp.isoformat() + 'Z' if last else '',
             'unread_count':  self.unread_count(for_user),
         }
 
@@ -167,7 +167,7 @@ class Message(db.Model):
             'id':        self.id,
             'username':  self.sender_username,
             'text':      self.content if not self.is_deleted else '🚫 This message was deleted',
-            'timestamp': self.timestamp.strftime('%H:%M'),
+            'timestamp': self.timestamp.isoformat() + 'Z',
             'read':      self.read,
             'file_url':  self.file_url if not self.is_deleted else None,
             'file_type': self.file_type if not self.is_deleted else None,
@@ -314,7 +314,7 @@ def update_profile():
     return jsonify({'message': 'Profile updated successfully', 'user': user.to_dict()}), 200
 
 
-@app.route('/conversations', methods=['GET'])
+@app.route('/api/conversations', methods=['GET'])
 def get_conversations():
     """Return all conversations the logged-in user is part of."""
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
@@ -332,7 +332,7 @@ def get_conversations():
     return jsonify([c.to_dict(me) for c in convs]), 200
 
 
-@app.route('/conversations', methods=['POST'])
+@app.route('/api/conversations', methods=['POST'])
 def create_or_get_conversation():
     """Create or retrieve a private conversation with another user."""
     token      = request.headers.get('Authorization', '').replace('Bearer ', '')
@@ -386,7 +386,7 @@ def create_group_conversation():
     return jsonify({'conversation_id': conv.id, 'is_group': True, 'name': name}), 200
 
 
-@app.route('/conversations/<int:conv_id>/messages', methods=['GET'])
+@app.route('/api/conversations/<int:conv_id>/messages', methods=['GET'])
 def get_conversation_messages(conv_id):
     """Return last 50 messages in a specific private conversation."""
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
@@ -607,7 +607,7 @@ def handle_send_private_message(data):
         'message_id':      msg.id,
         'username':        me,
         'text':            content,
-        'timestamp':       msg.timestamp.strftime('%H:%M'),
+        'timestamp':       msg.timestamp.isoformat() + 'Z',
         'file_url':        file_url,
         'file_type':       file_type,
         'reactions':       {}
@@ -620,7 +620,7 @@ def handle_send_private_message(data):
         'text':            content,
         'file_url':        file_url,
         'file_type':       file_type,
-        'timestamp':       msg.timestamp.strftime('%H:%M')
+        'timestamp':       msg.timestamp.isoformat() + 'Z'
     }
     for member in conv.get_members():
         emit('new_message_notification', notification_payload, to=f"user_{member}")

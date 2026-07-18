@@ -80,7 +80,7 @@ function Inbox() {
   // Load active conversation messages when it changes
   useEffect(() => {
     if (activeConv && token && socketRef.current) {
-      fetch(`/api/messages/${activeConv.id}`, {
+      fetch(`/api/conversations/${activeConv.id}/messages`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       .then(res => res.json())
@@ -163,7 +163,7 @@ function Inbox() {
   }, [activeConv, username, token]);
 
   const loadConversations = (tok) => {
-    fetch('/conversations', { headers: { 'Authorization': `Bearer ${tok}` } })
+    fetch('/api/conversations', { headers: { 'Authorization': `Bearer ${tok}` } })
       .then(res => res.json())
       .then(data => setConversations(data))
       .catch(console.error);
@@ -191,7 +191,7 @@ function Inbox() {
     });
     if (res.ok) {
       const data = await res.json();
-      const newConvList = await (await fetch('/conversations', { headers: { 'Authorization': `Bearer ${token}` } })).json();
+      const newConvList = await (await fetch('/api/conversations', { headers: { 'Authorization': `Bearer ${token}` } })).json();
       setConversations(newConvList);
       const c = newConvList.find(c => c.id === data.conversation_id);
       setActiveConv(c);
@@ -207,7 +207,7 @@ function Inbox() {
     });
     if (res.ok) {
       const data = await res.json();
-      const newConvList = await (await fetch('/conversations', { headers: { 'Authorization': `Bearer ${token}` } })).json();
+      const newConvList = await (await fetch('/api/conversations', { headers: { 'Authorization': `Bearer ${token}` } })).json();
       setConversations(newConvList);
       const c = newConvList.find(c => c.id === data.conversation_id);
       setActiveConv(c);
