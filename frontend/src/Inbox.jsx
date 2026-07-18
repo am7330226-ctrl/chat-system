@@ -262,7 +262,7 @@ function Inbox() {
   };
 
   return (
-    <div className="layout">
+    <div className="app-container">
       <Sidebar 
         username={username} 
         avatarUrl={avatarUrl} 

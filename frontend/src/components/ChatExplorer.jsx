@@ -6,7 +6,8 @@ function ChatExplorer({
   onSelectConversation, 
   onNewChat,
   onlineUsers,
-  username
+  username,
+  avatarUrl
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState('All');
@@ -18,12 +19,10 @@ function ChatExplorer({
   };
 
   const filteredConvs = conversations.filter(c => {
-    // 1. Search filter
     const matchesSearch = c.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           c.with?.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
 
-    // 2. Chip filter
     if (filterMode === 'Unread') {
       return c.unread_count > 0;
     } else if (filterMode === 'Online') {
@@ -36,34 +35,34 @@ function ChatExplorer({
   });
 
   return (
-    <div className="chat-explorer">
+    <section className="chat-explorer" aria-label="Chat Explorer">
       <div className="explorer-header">
-        <h2>Messages</h2>
-        <button className="new-chat-btn" onClick={onNewChat} title="New Chat">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-        </button>
+        <div className="explorer-title-row">
+          <h1 className="explorer-title">Chats</h1>
+          <button className="new-chat-btn" onClick={onNewChat} title="New Chat">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </button>
+        </div>
+
+        <div className="search-container">
+          <span className="search-icon">🔍</span>
+          <input 
+            type="text" 
+            className="search-input"
+            placeholder="Search chats, threads..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
       </div>
 
-      <div className="search-bar">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
-        <input 
-          type="text" 
-          placeholder="Search chats..." 
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-      </div>
-
-      <div className="filter-chips">
+      <div className="filter-tags">
         {['All', 'Unread', 'Online'].map(mode => (
           <button 
             key={mode}
-            className={`chip ${filterMode === mode ? 'active' : ''}`}
+            className={`filter-chip ${filterMode === mode ? 'active' : ''}`}
             onClick={() => setFilterMode(mode)}
           >
             {mode}
@@ -74,9 +73,8 @@ function ChatExplorer({
       <div className="chat-list" id="chatList">
         {filteredConvs.length === 0 ? (
           <div className="state-msg">
-            <span className="icon">💬</span>
+            <span className="icon">⏳</span>
             <p>No messages found</p>
-            <small>Change filters or search for another user</small>
           </div>
         ) : (
           filteredConvs.map(conv => {
@@ -133,7 +131,30 @@ function ChatExplorer({
           })
         )}
       </div>
-    </div>
+
+      <div className="user-widget" id="userWidgetCard">
+        <div className="user-widget-profile">
+          <div className="avatar-wrapper">
+            <div 
+              className="avatar" 
+              id="myWidgetAvatar"
+              style={{ background: avatarUrl ? 'transparent' : getAvatarColor(username) }}
+            >
+              {avatarUrl ? (
+                <img src={avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} alt="avatar" />
+              ) : (
+                username ? username[0].toUpperCase() : '?'
+              )}
+            </div>
+            <span className="status-dot online"></span>
+          </div>
+          <div className="user-widget-info">
+            <span className="user-widget-name" id="myWidgetName">{username}</span>
+            <span className="user-widget-role">Active & Chatting</span>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

@@ -85,13 +85,13 @@ function ChatWorkspace({
 
   if (!activeConv) {
     return (
-      <div className="chat-workspace">
-        <div className="empty-workspace-state">
-          <div className="empty-icon">💬</div>
-          <h3>Your Space</h3>
-          <p>Select a chat or start a new conversation.</p>
+      <main className="chat-workspace" aria-label="Active Chat Hub">
+        <div id="emptyWorkspaceState">
+          <span className="icon">💬</span>
+          <h2>Select a Conversation</h2>
+          <p>Choose an existing thread from the explorer list, or tap the "+" button to start a new chat!</p>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -102,29 +102,40 @@ function ChatWorkspace({
     : onlineUsers.has(activeConv.with);
 
   return (
-    <div className="chat-workspace active">
-      <div className="chat-header">
-        <div className="chat-header-info">
-          <div className="avatar-wrapper">
-            <div className="avatar" style={{ background: displayAvatarUrl ? 'transparent' : getAvatarColor(displayName) }}>
-              {displayAvatarUrl ? (
-                <img src={displayAvatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} alt="avatar" />
-              ) : (
-                activeConv.is_group ? '👥' : (displayName ? displayName[0].toUpperCase() : '?')
-              )}
+    <main className="chat-workspace" aria-label="Active Chat Hub">
+      <div id="activeWorkspaceFrame" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <header className="chat-header">
+          <div className="active-user-details">
+            <button className="header-icon-btn back-btn-mobile" title="Back to Chats" style={{marginRight: '8px', display: 'none'}}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{width: '20px', height: '20px'}}>
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            <div className="avatar-wrapper">
+              <div className="avatar" style={{ background: displayAvatarUrl ? 'transparent' : getAvatarColor(displayName) }}>
+                {displayAvatarUrl ? (
+                  <img src={displayAvatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} alt="avatar" />
+                ) : (
+                  activeConv.is_group ? '👥' : (displayName ? displayName[0].toUpperCase() : '?')
+                )}
+              </div>
+              <div className={`status-dot ${isOnline ? 'online' : ''}`}></div>
             </div>
-            <div className={`status-dot ${isOnline ? 'online' : ''}`}></div>
-          </div>
-          <div>
-            <div className="chat-name">{displayName}</div>
-            <div className="chat-status-text">
-              {activeConv.is_group 
-                ? `${activeConv.members?.length || 0} members` 
-                : (isOnline ? 'Online' : 'Offline')}
+            <div className="active-user-info">
+              <span className="active-user-name">{displayName}</span>
+              <span className="active-user-status">
+                {activeConv.is_group 
+                  ? `${activeConv.members?.length || 0} members` 
+                  : (isOnline ? 'Online' : 'Offline')}
+              </span>
             </div>
           </div>
-        </div>
-      </div>
+          <div className="header-actions">
+            <button className="header-icon-btn" title="Call"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
+            <button className="header-icon-btn" title="Video"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></button>
+            <button className="header-icon-btn" title="More"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+          </div>
+        </header>
 
       <div className="chat-box">
         {messages.map((msg, idx) => {
@@ -227,6 +238,7 @@ function ChatWorkspace({
         </form>
       </div>
     </div>
+    </main>
   );
 }
 
