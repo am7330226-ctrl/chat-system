@@ -2,17 +2,21 @@ import React from 'react';
 
 function Sidebar({ onOpenProfile }) {
   return (
-    <aside className="sidebar-rail" aria-label="Workspaces">
+    <div className="sidebar-rail">
       <div className="workspace-list">
-        <div className="logo-item" title="ChatSphere Home">💬</div>
-        <button className="workspace-btn active" title="Personal Chats">🏠</button>
+        <div className="logo-item" title="ChatSphere">💬</div>
+        <button className="workspace-btn active" title="Chats">🏠</button>
       </div>
-      
       <div className="rail-footer">
-        <button className="settings-btn" id="themeToggleBtn" title="Toggle Theme" aria-label="Toggle Theme" style={{marginBottom: '12px', fontSize: '18px'}}>🌙</button>
-        <button className="settings-btn" onClick={onOpenProfile} title="Profile" aria-label="Profile">👤</button>
+        <button
+          className="settings-btn"
+          onClick={onOpenProfile}
+          title="Profile &amp; Settings"
+        >
+          👤
+        </button>
       </div>
-    </aside>
+    </div>
   );
 }
 

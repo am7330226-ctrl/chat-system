@@ -276,6 +276,8 @@ function Inbox() {
         onNewChat={() => { fetchUsers(); setNewChatModalOpen(true); }}
         onlineUsers={onlineUsers}
         username={username}
+        avatarUrl={avatarUrl}
+        onOpenProfile={() => setProfileModalOpen(true)}
       />
       
       <ChatWorkspace 
