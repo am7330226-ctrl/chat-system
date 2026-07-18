@@ -12,6 +12,14 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/inbox" element={<Inbox />} />
+        
+        {/* Legacy route redirects */}
+        <Route path="/login.html" element={<Navigate to="/login" replace />} />
+        <Route path="/register.html" element={<Navigate to="/register" replace />} />
+        <Route path="/inbox.html" element={<Navigate to="/inbox" replace />} />
+        
+        {/* Catch-all to prevent blank screens */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );
